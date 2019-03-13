@@ -108,24 +108,18 @@ namespace
 	template <typename Base, typename Mul>
 	void AddResult(std::vector<Base>& res, const MulUtil<Base, Mul> mul, const int index)
 	{
+		// First, handle carry over
 		if (mul.carryOver)
 		{
-			const MulUtil<Base, Mul> t((Mul)res[index + 1] + (Mul)mul.carryOver);
-			res[index + 1] = t.valLower;
-			if (t.carryOver)
-			{
-				AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
-			}
+			AddResult(res, MulUtil<Base, Mul>(mul.carryOver), index + 1);
 		}
-		//else
-		{
-			const MulUtil<Base, Mul> t((Mul)res[index] + (Mul)mul.valLower);
-			res[index] = t.valLower;
+
+		const MulUtil<Base, Mul> t((Mul)res[index] + (Mul)mul.valLower);
+		res[index] = t.valLower;
 			
-			if (t.carryOver)
-			{
-				AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
-			}
+		if (t.carryOver)
+		{
+			AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
 		}
 	};
 }
@@ -142,6 +136,12 @@ public:
 		m_vals.push_back(0);
 	}
 
+	BigInt(const BigInt& other)
+		: m_vals(other.m_vals)
+	{
+
+	}
+
 	BigInt(const Base val)
 	{
 		m_vals.push_back(val);
@@ -151,7 +151,10 @@ public:
 	{
 		MulUtil<Base, Mul> temp(val);
 		m_vals.push_back(temp.valLower);
-		m_vals.push_back(temp.carryOver);
+		if (temp.carryOver)
+		{
+			m_vals.push_back(temp.carryOver);
+		}
 	}
 
 	BigInt(const char* hex)
@@ -165,14 +168,14 @@ public:
 		{
 			throw std::invalid_argument("Not a valid hexadecimal");
 		}
-		/*if (hex[0] != '0' && hex[1] != 'x')
+		if (hex[0] != '0' && hex[1] != 'x')
 		{
 			throw std::invalid_argument("Not a valid hexadecimal");
-		}*/
+		}
 
 		const size_t ignoreFrom = [hex, length]()
 		{
-			int index = (hex[0] == '0' && hex[1] == 'x') ? 2 : 0;
+			int index =  2;
 			for (size_t i = index; i < length; ++i)
 			{
 				if (hex[i] == '0')
@@ -206,13 +209,13 @@ public:
 		}
 	}
 
-	BigInt& operator+(const BigInt& other)
+	BigInt operator+(const BigInt& other) const
 	{
 		if (!other.m_vals.empty())
 		{
+			BigInt copy;
 			const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
-			std::vector<Base> res;
-			res.resize(s, 0);
+			copy.m_vals.resize(s, 0);
 			const size_t size = m_vals.size();
 			const size_t size2 = other.m_vals.size();
 
@@ -221,20 +224,17 @@ public:
 				const Mul val1 = i < size ? m_vals[i] : 0;
 				const Mul val2 = i < size2 ? other.m_vals[i] : 0;
 				MulUtil<Base, Mul> sum(val1 + val2);
-				AddResult(res, sum, i);
+				AddResult(copy.m_vals, sum, i);
 			}
 
-			if (res[res.size() - 1] == 0)
-			{
-				res.erase(res.begin() + (res.size() - 1));
-			}
+			copy.CleanPreceedingZeroes();
 
-			m_vals = res;
+			return copy;
 		}
 		return *this;
 	}
 
-	BigInt& operator-(const BigInt& other)
+	BigInt operator-(const BigInt& other) const
 	{
 		if (other.m_vals.size() > m_vals.size())
 		{
@@ -242,42 +242,27 @@ public:
 		}
 
 		const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
-		std::vector<Base> res;
-		res.resize(s, 0);
+		BigInt copy;
+		copy.m_vals.resize(s, 0);
 		const size_t size = m_vals.size();
 		const size_t size2 = other.m_vals.size();
 
-		for (size_t i = 0; i < res.size(); ++i)
+		for (size_t i = 0; i < copy.m_vals.size(); ++i)
 		{
 			const Base val1 = ~Base(i < size ? m_vals[i] : 0);
 			const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
 			MulUtil<Base, Mul> sum(val1 + val2);
-			AddResult(res, sum, i);
+			AddResult(copy.m_vals, sum, i);
 
-			res[i] = ~res[i];
+			copy.m_vals[i] = ~copy.m_vals[i];
 		}
 
-		for (auto i = res.size() - 1; i >= 0; --i)
-		{
-			if (res[i] == 0)
-			{
-				if (res.size() == 1)
-				{
-					break;
-				}
-				res.erase(res.begin() + i);
-			}
-			else
-			{
-				break;
-			}
-		}
+		copy.CleanPreceedingZeroes();
 
-		m_vals = res;
-		return *this;
+		return copy;
 	}
 
-	BigInt& operator%(const BigInt& other)
+	BigInt operator%(const BigInt& other) const
 	{
 		if (other.m_vals.size() > m_vals.size()
 			|| *this < other)
@@ -285,15 +270,17 @@ public:
 			return *this;
 		}
 
+		BigInt divisor(other);
+		BigInt copy(*this);
 		const uint64_t bitCount = GetBitCount() - other.GetBitCount();
 		const auto chunks = 1 + ((bitCount - 1) / (sizeof(Base) * 8));
 		
 		const size_t shift = size_t((bitCount % chunks) - 1);
 
-		BigInt copy;
-		copy.m_vals.resize(size_t(chunks), 0);
+		BigInt mod;
+		mod.m_vals.resize(size_t(chunks), 0);
 		Base value = Base(1 << shift);
-		copy.m_vals[size_t(chunks) - 1] = value;
+		mod.m_vals[size_t(chunks) - 1] = value;
 		/*while ((*this) >= other)
 		{
 			(*this) - other;
@@ -301,18 +288,19 @@ public:
 		return *this;
 	}
 
-	BigInt& operator*(const BigInt& other)
+	BigInt operator*(const BigInt& other) const
 	{
 		if (other.m_vals.empty() || m_vals.empty())
 		{
-			m_vals.clear();
+			return BigInt();
 		}
 		else
 		{
 			const auto s = m_vals.size() + other.m_vals.size();
-			std::vector<Base> res;
-			res.resize(s, 0);
+			BigInt copy;
+			copy.m_vals.resize(s, 0);
 
+			BigInt test = (copy >> 1);
 			const std::vector<Base>& multiplier = m_vals.size() <= other.m_vals.size() ? m_vals : other.m_vals;
 			const std::vector<Base>& multiplied = m_vals.size() > other.m_vals.size() ? m_vals : other.m_vals;
 
@@ -320,29 +308,84 @@ public:
 			{
 				for (size_t ii = 0; ii < multiplied.size(); ++ii)
 				{
-					MulUtil<Base, Mul> mul((Mul)multiplier[i] * (Mul)multiplied[ii]);
-					AddResult(res, mul, i + ii);
+					const Mul val1 = multiplier[i];
+					const Mul val2 = multiplied[ii];
+					if (val1 == 0 || val2 == 0)
+					{
+						continue;
+					}
+					MulUtil<Base, Mul> mul(val1 * val2);
+					AddResult(copy.m_vals, mul, i + ii);
 				}
 			}
+			copy.CleanPreceedingZeroes();
 
-			for (auto i = res.size() - 1; i >= 0; --i)
+			/*for (auto i = copy.m_vals.size() - 1; i >= 0; --i)
 			{
-				if (res[i] == 0)
+				if (copy.m_vals[i] == 0)
 				{
-					res.erase(res.begin() + i);
+					copy.m_vals.erase(copy.m_vals.begin() + i);
 				}
 				else
 				{
 					break;
 				}
-			}
-
-			m_vals = res;
+			}*/
+			return copy;
 		}
-		return *this;
 	}
 
-	bool operator>(const BigInt& other)
+	BigInt operator<<(const int shift) const
+	{
+		BigInt copy(*this);
+
+		const std::div_t res = std::div(m_vals.size() * sizeof(Base) * 8, shift);
+		if (res.rem == 0)
+		{
+
+		}
+		else
+		{
+
+		}
+		return copy;
+	}
+
+	BigInt operator>>(const int shift) const
+	{
+		BigInt copy;
+
+		const auto quot = (shift / (sizeof(Base) * 8));
+		const auto rem = (shift % (sizeof(Base) * 8));
+		if (rem == 0)
+		{
+			// Simpler case, just drop elements from the start
+			copy.m_vals = std::vector<Base>(m_vals.begin() + quot, m_vals.end());
+		}
+		else
+		{
+			Base mask = 0;
+			for (size_t i = 0; i < rem; ++i)
+			{
+				mask |= (Base(1) << i);
+			}
+
+			copy.m_vals.resize(m_vals.size() - quot, 0);
+
+			for (auto i = quot; i < m_vals.size(); ++i)
+			{
+				const Base val = (m_vals[i] >> rem);
+				Base upperVal = ((i + 1) < m_vals.size()) ? m_vals[i + 1] : 0;
+				upperVal &= mask;
+				upperVal = upperVal << ((sizeof(Base) * 8) - rem);
+				copy.m_vals[i - quot] = val | upperVal;
+			}
+			copy.CleanPreceedingZeroes();
+		}
+		return copy;
+	}
+
+	bool operator>(const BigInt& other) const
 	{
 		bool bigger = true;
 		if (m_vals.size() == other.m_vals.size())
@@ -367,7 +410,7 @@ public:
 		return bigger;
 	}
 
-	bool operator>=(const BigInt& other)
+	bool operator>=(const BigInt& other) const
 	{
 		bool greaterOrEqual = true;
 		if (m_vals.size() == other.m_vals.size())
@@ -393,22 +436,22 @@ public:
 		return greaterOrEqual;
 	}
 
-	bool operator<=(const BigInt& other)
+	bool operator<=(const BigInt& other) const
 	{
 		return !(*this >= other);
 	}
 
-	bool operator<(const BigInt& other)
+	bool operator<(const BigInt& other) const
 	{
 		return !(*this > other);
 	}
 
-	bool operator!=(const BigInt& other)
+	bool operator!=(const BigInt& other) const
 	{
 		return !(*this == other);
 	}
 
-	bool operator==(const BigInt& other)
+	bool operator==(const BigInt& other) const
 	{
 		bool equal = true;
 		if (m_vals.size() == other.m_vals.size())
@@ -490,5 +533,64 @@ private:
 		return 0;
 	}
 
+	bool IsBase2(uint64_t& base) const
+	{
+		uint64_t t = 0;
+		if (m_vals.size() == 0)
+		{
+			return false;
+		}
+		
+		bool bitFound = false;
+		for (const Base v : m_vals)
+		{
+			std::bitset<sizeof(Base) * 8> bits(v);
+			if (bitFound && bits.count() != 0)
+			{
+				return false;
+			}
+			else if (bits.count() > 1)
+			{
+				return false;
+			}
+			else if (bits.count() == 0)
+			{
+				if (!bitFound)
+					t += sizeof(Base) * 8;
+				continue;
+			}
+			else if (bits.count() == 1)
+			{
+				bitFound = true;
+				for (auto i = 0; i < bits.size(); ++i)
+				{
+					if (bits.test(i))
+					{
+						t += (i + 1);
+						break;
+					}
+				}
+			}
+		}
+		base = bitFound ? t : 0;
+		return bitFound;
+	}
+
+	void CleanPreceedingZeroes()
+	{
+		for (auto i = m_vals.size() - 1; i > 0; --i)
+		{
+			if (m_vals[i] == 0)
+			{
+				m_vals.erase(m_vals.begin() + i);
+			}
+			else
+			{
+				break;
+			}
+		}
+	}
+
+private:
 	std::vector<Base> m_vals;
 };
