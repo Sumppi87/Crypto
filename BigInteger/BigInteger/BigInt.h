@@ -318,35 +318,44 @@ public:
 					AddResult(copy.m_vals, mul, i + ii);
 				}
 			}
+
 			copy.CleanPreceedingZeroes();
 
-			/*for (auto i = copy.m_vals.size() - 1; i >= 0; --i)
-			{
-				if (copy.m_vals[i] == 0)
-				{
-					copy.m_vals.erase(copy.m_vals.begin() + i);
-				}
-				else
-				{
-					break;
-				}
-			}*/
 			return copy;
 		}
 	}
 
 	BigInt operator<<(const int shift) const
 	{
-		BigInt copy(*this);
+		BigInt copy;
 
-		const std::div_t res = std::div(m_vals.size() * sizeof(Base) * 8, shift);
-		if (res.rem == 0)
+		const auto quot = (shift / (sizeof(Base) * 8));
+		const auto rem = (shift % (sizeof(Base) * 8));
+
+		if (rem == 0)
 		{
+			// Add elements by the given quotient
+			copy.m_vals.resize(quot, 0);
 
+			// Simpler case, just add elements after added zeroes
+			copy.m_vals.insert(copy.m_vals.begin() + quot, m_vals.begin(), m_vals.end());
 		}
 		else
 		{
+			// Size of m_vals is incremented by quotient and possibly by one due to remainder
+			// -> Shifting last element can go into the +1 element
+			copy.m_vals.resize(m_vals.size() + quot + 1, 0);
 
+			for (size_t i = 0; i <= m_vals.size(); ++i)
+			{
+				Base valLower = (i > 0) ? m_vals[i - 1] : 0;
+				valLower = valLower >> ((sizeof(Base) * 8) - rem);
+
+				Base val = (i < m_vals.size()) ? m_vals[i] : 0;
+				val = val << rem;
+				copy.m_vals[i + quot] = val | valLower;
+			}
+			copy.CleanPreceedingZeroes();
 		}
 		return copy;
 	}
@@ -364,11 +373,7 @@ public:
 		}
 		else
 		{
-			Base mask = 0;
-			for (size_t i = 0; i < rem; ++i)
-			{
-				mask |= (Base(1) << i);
-			}
+			// More complicated as the shift crosses element (in m_vals) boundaries
 
 			copy.m_vals.resize(m_vals.size() - quot, 0);
 
@@ -376,7 +381,6 @@ public:
 			{
 				const Base val = (m_vals[i] >> rem);
 				Base upperVal = ((i + 1) < m_vals.size()) ? m_vals[i + 1] : 0;
-				upperVal &= mask;
 				upperVal = upperVal << ((sizeof(Base) * 8) - rem);
 				copy.m_vals[i - quot] = val | upperVal;
 			}
@@ -562,11 +566,11 @@ private:
 			else if (bits.count() == 1)
 			{
 				bitFound = true;
-				for (auto i = 0; i < bits.size(); ++i)
+				for (size_t i = 0; i < bits.size(); ++i)
 				{
 					if (bits.test(i))
 					{
-						t += (i + 1);
+						t += i;
 						break;
 					}
 				}
