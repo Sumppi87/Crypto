@@ -6,19 +6,85 @@
 #include <iostream>
 #include <chrono>
 
+template <typename Base1, typename Mul1>
+void Compare(const BigInt<Base1, Mul1>& v1, const std::string& h2)
+{
+	const auto h1 = v1.toHex();
+	if (h1 != h2)
+	{
+		std::cout << "Error, Hex-values do not match:" << std::endl
+			<< "First:  " << h1 << std::endl
+			<< "Second: " << h2 << std::endl;
+		throw std::logic_error("Invalid Hex-values");
+	}
+}
+
+template <typename Base1, typename Mul1, typename Base2, typename Mul2>
+void Compare(const BigInt<Base1, Mul1>& v1, const BigInt<Base2, Mul2>& v2)
+{
+	const auto h2 = v2.toHex();
+	Compare(v1, h2);
+}
+
 void Test()
 {
 	BigInt<uint8_t, uint16_t> n("0xA01AFEDCBA01");
 	BigInt<uint8_t, uint16_t> m("0x19F958");
+	
+	BigInt<uint8_t, uint16_t> res("0x103E942EBA76E3E958");
+
+	auto a = (n << 16);
+	auto b = (n >> 17);
+	std::cout << (n >> 17).toHex() << std::endl;
+	std::cout << (n >> 16).toHex() << std::endl;
+	std::cout << (n >> 9).toHex() << std::endl;
 
 	n % m;
 	std::cout << n.toHex() << std::endl;
 
 	std::cout << (n - n).toHex() << std::endl;
+	
+	Compare(BigInt<uint8_t, uint16_t>("0xFFFFFFFF")
+		* BigInt<uint8_t, uint16_t>("0xFF0001"),
+		BigInt<uint8_t, uint16_t>("0xFF0000FF00FFFF"));
+	
+	Compare(BigInt<uint32_t, uint64_t>("0x100001")
+		* BigInt<uint32_t, uint64_t>("0x8001"),
+		BigInt<uint8_t, uint16_t>("0x800108001"));
+	Compare(m * n, n * m);
+	Compare(m * n, res);
+}
+
+void Test2()
+{
+	const BigInt<uint32_t, uint64_t> shifted32("0x841FA01A");
+	const BigInt<uint32_t, uint64_t> shifted31("0x1083F4035");
+	BigInt<uint8_t, uint16_t> t8("0x841FA01AFEDCBA01");
+	BigInt<uint16_t, uint32_t> t16("0x841FA01AFEDCBA01");
+	BigInt<uint32_t, uint64_t> t32("0x841FA01AFEDCBA01");
+	Compare(t8, t16);
+	Compare(t16, t32);
+	Compare(t8, t32);
+
+	Compare(t8 >> 32, shifted32);
+	Compare(t8 >> 31, shifted31);
+	Compare(t16 >> 32, shifted32);
+	Compare(t16 >> 31, shifted31);
+	Compare(t32 >> 32, shifted32);
+	Compare(t32 >> 31, shifted31);
+
+	for (auto shift = 1; shift < 33; ++shift)
+	{
+		Compare(t8 >> shift, t16 >> shift);
+		Compare(t16 >> shift, t32 >> shift);
+		Compare(t8 >> shift, t32 >> shift);
+	}
+
 }
 
 int main()
 {
+	Test2();
 	Test();
 	BigInt<uint32_t, uint64_t>();
 
