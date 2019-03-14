@@ -49,7 +49,8 @@ namespace
 			break;
 		}
 	}
-	uint8_t CharToNum(const char c)
+
+	uint8_t CharToNum(const char c, bool isHex)
 	{
 		switch (c)
 		{
@@ -73,21 +74,27 @@ namespace
 			return 8;
 		case '9':
 			return 9;
-		case 'A':
-			return 10;
-		case 'B':
-			return 11;
-		case 'C':
-			return 12;
-		case 'D':
-			return 13;
-		case 'E':
-			return 14;
-		case 'F':
-			return 15;
 		default:
-			throw std::invalid_argument("Not a valid hexadecimal");
-			break;
+			if (!isHex)
+				throw std::invalid_argument("Not a valid decimal number");
+			switch (c)
+			{
+			case 'A':
+				return 10;
+			case 'B':
+				return 11;
+			case 'C':
+				return 12;
+			case 'D':
+				return 13;
+			case 'E':
+				return 14;
+			case 'F':
+				return 15;
+			default:
+				throw std::invalid_argument("Not a valid hexadecimal");
+				break;
+			}
 		}
 	}
 
@@ -106,7 +113,7 @@ namespace
 	};
 
 	template <typename Base, typename Mul>
-	void AddResult(std::vector<Base>& res, const MulUtil<Base, Mul> mul, const int index)
+	void AddResult(std::vector<Base>& res, const MulUtil<Base, Mul> mul, const size_t index)
 	{
 		// First, handle carry over
 		if (mul.carryOver)
@@ -116,7 +123,7 @@ namespace
 
 		const MulUtil<Base, Mul> t((Mul)res[index] + (Mul)mul.valLower);
 		res[index] = t.valLower;
-			
+
 		if (t.carryOver)
 		{
 			AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
@@ -131,33 +138,35 @@ class BigInt
 	static_assert(std::is_unsigned<Base>::value, "Base must be unsigned int");
 	static_assert(std::is_unsigned<Mul>::value, "Base must be unsigned int");
 public:
-	BigInt()
-	{
-		m_vals.push_back(0);
-	}
 
-	BigInt(const BigInt& other)
-		: m_vals(other.m_vals)
+	static BigInt FromBase10(const char* input)
 	{
-
-	}
-
-	BigInt(const Base val)
-	{
-		m_vals.push_back(val);
-	}
-
-	BigInt(const Mul val)
-	{
-		MulUtil<Base, Mul> temp(val);
-		m_vals.push_back(temp.valLower);
-		if (temp.carryOver)
+		if (input == nullptr)
 		{
-			m_vals.push_back(temp.carryOver);
+			throw std::invalid_argument("Not a valid decimal");
 		}
+		auto length = strlen(input);
+		if (length < 1)
+		{
+			throw std::invalid_argument("Not a valid decimal");
+		}
+
+		BigInt ten(10);
+		BigInt res;
+
+		for (size_t i = 0; i < length; ++i)
+		{
+			BigInt digit;
+			digit.m_vals[size_t(0)] = CharToNum(input[i], false);
+			res = res * ten;
+			res = res + digit;
+		}
+		res.CleanPreceedingZeroes();
+
+		return res;
 	}
 
-	BigInt(const char* hex)
+	static BigInt FromBase16(const char* hex)
 	{
 		if (hex == nullptr)
 		{
@@ -175,7 +184,7 @@ public:
 
 		const size_t ignoreFrom = [hex, length]()
 		{
-			int index =  2;
+			size_t index = 2;
 			for (size_t i = index; i < length; ++i)
 			{
 				if (hex[i] == '0')
@@ -190,28 +199,107 @@ public:
 			return index;
 		}();
 
-		std::div_t res = std::div(int(length - ignoreFrom), int((sizeof(Base) * 2)));
-		const size_t neededSize = res.rem == 0 ? res.quot : res.quot + 1;
-		m_vals.resize(neededSize, 0);
+		BigInt res;
+
+		std::div_t div = std::div(int(length - ignoreFrom), int((sizeof(Base) * 2)));
+		const size_t neededSize = div.rem == 0 ? div.quot : div.quot + 1;
+		res.m_vals.resize(neededSize, 0);
 
 		for (size_t i = length - 1; i >= ignoreFrom; --i)
 		{
-			const std::div_t res = std::div(int((length - 1) - i), int(sizeof(Base) * 2));
-			const size_t index = res.quot;
-			const size_t shift = res.rem * 4;
-			auto val = CharToNum(hex[i]);
+			const std::div_t d = std::div(int((length - 1) - i), int(sizeof(Base) * 2));
+			const size_t index = d.quot;
+			const size_t shift = d.rem * 4;
+			auto val = CharToNum(hex[i], true);
 			const Base shifted = (val << shift);
-			m_vals[index] += shifted;
+			res.m_vals[index] += shifted;
 			if (i == 0)
 			{
 				break;
 			}
 		}
+		res.CleanPreceedingZeroes();
+
+		return res;
+	}
+
+	BigInt()
+	{
+		m_vals.push_back(0);
+	}
+
+	BigInt(const BigInt& other)
+		: m_vals(other.m_vals)
+	{
+
+	}
+
+	BigInt(const uint8_t val)
+	{
+		FromNum(val);
+	}
+
+	BigInt(const uint16_t val)
+	{
+		FromNum(val);
+	}
+
+	BigInt(const uint32_t val)
+	{
+		FromNum(val);
+	}
+
+	BigInt(const uint64_t val)
+	{
+		FromNum(val);
+	}
+
+	BigInt(const int val)
+	{
+		if (val < 0)
+		{
+			throw std::invalid_argument("Initializing with a negative number!");
+		}
+		FromNum((uint32_t)val);
+	}
+
+	BigInt(const char* input)
+	{
+		if (input == nullptr)
+		{
+			throw std::invalid_argument("Not a valid input");
+		}
+		auto length = strlen(input);
+		if (length < 1)
+		{
+			throw std::invalid_argument("Not a valid input");
+		}
+		if (length > 3 && input[0] == '0' && input[1] == 'x')
+		{
+			*this = FromBase16(input);
+		}
+		else
+		{
+			*this = FromBase10(input);
+		}
+	}
+
+	struct DivRes
+	{
+		BigInt quotient;
+		BigInt remainder;
+	};
+
+	DivRes Div(const BigInt& div)
+	{
+		DivRes res;
+		Div(div, res.remainder, &res.quotient);
+		return res;
 	}
 
 	BigInt operator+(const BigInt& other) const
 	{
-		if (!other.m_vals.empty())
+		if (!other.IsZero())
 		{
 			BigInt copy;
 			const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
@@ -236,27 +324,28 @@ public:
 
 	BigInt operator-(const BigInt& other) const
 	{
-		if (other.m_vals.size() > m_vals.size())
+		if (other.IsZero())
+		{
+			return *this;
+		}
+		else if (other > *this)
 		{
 			throw std::logic_error("Decrement would overflow");
 		}
 
-		const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
 		BigInt copy;
-		copy.m_vals.resize(s, 0);
+		copy.m_vals.resize(m_vals.size(), 0);
 		const size_t size = m_vals.size();
 		const size_t size2 = other.m_vals.size();
 
-		for (size_t i = 0; i < copy.m_vals.size(); ++i)
+		for (size_t i = 0; i < m_vals.size(); ++i)
 		{
 			const Base val1 = ~Base(i < size ? m_vals[i] : 0);
 			const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
-			MulUtil<Base, Mul> sum(val1 + val2);
+			MulUtil<Base, Mul> sum(Mul(val1) + Mul(val2));
 			AddResult(copy.m_vals, sum, i);
-
 			copy.m_vals[i] = ~copy.m_vals[i];
 		}
-
 		copy.CleanPreceedingZeroes();
 
 		return copy;
@@ -264,64 +353,42 @@ public:
 
 	BigInt operator%(const BigInt& other) const
 	{
-		if (other.m_vals.size() > m_vals.size()
-			|| *this < other)
+		if (other.IsZero())
+		{
+			throw std::invalid_argument("Division by zero");
+		}
+		else if (*this < other)
 		{
 			return *this;
 		}
 
-		BigInt remainder(*this);
-
-		while (remainder > other)
-		{
-			const uint64_t shift = remainder.GetBitWidth() - other.GetBitWidth();
-			BigInt divisor = other << shift;
-			if (divisor >= remainder)
-			{
-				divisor = divisor >> 1;
-			}
-			remainder = remainder - divisor;
-		}
+		BigInt remainder;
+		Div(other, remainder, nullptr);
 		return remainder;
 	}
 
 	BigInt operator/(const BigInt& other) const
 	{
-		if (other.m_vals.size() == 0
-			|| (other.m_vals.size() == 1
-				&& other.m_vals[0] == 0))
+		uint64_t base = 0;
+		if (other.IsZero())
 		{
 			throw std::invalid_argument("Division by zero");
 		}
-
-		uint64_t base = 0;
-		if (other.IsBase2(base))
+		else if (other.IsBase2(base))
 		{
 			// If the divisor is base-2, a simple shift will do
 			return *this >> base;
 		}
-		
-		BigInt remainder(*this);
-		BigInt quot;
 
-		while (remainder > other)
-		{
-			uint64_t shift = remainder.GetBitWidth() - other.GetBitWidth();
-			BigInt divisor = other << shift;
-			if (divisor >= remainder)
-			{
-				divisor = divisor >> 1;
-				--shift;
-			}
-			quot = quot + BigInt(Base(1)) << shift;
-			remainder = remainder - divisor;
-		}
+		BigInt remainder;
+		BigInt quot;
+		Div(other, remainder, &quot);
 		return quot;
 	}
 
 	BigInt operator*(const BigInt& other) const
 	{
-		if (other.m_vals.empty() || m_vals.empty())
+		if (IsZero() || other.IsZero())
 		{
 			return BigInt();
 		}
@@ -356,13 +423,48 @@ public:
 		}
 	}
 
+	BigInt PowMod(const BigInt& exp, const BigInt& mod) const
+	{
+		BigInt e = exp;
+		BigInt base = *this;
+		BigInt copy = BigInt(1);
+
+		while (!e.IsZero())
+		{
+			if (e.IsOdd())
+			{
+				copy = copy * base;
+				copy = copy % mod;
+				//*this *= base;
+				//*this %= mod;
+			}
+
+			e = e >> 1;
+			base = base * base;
+			base = base % mod;
+			//e >>= 1;
+			//base *= base;
+			//base %= mod;
+		}
+		return copy;
+	}
+
 	BigInt operator<<(const uint64_t shift) const
 	{
+		if (IsZero())
+		{
+			return BigInt();
+		}
+		else if (shift == 0)
+		{
+			return *this;
+		}
+
 		BigInt copy;
 
 		const uint64_t quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
-		
+
 		if ((quot + m_vals.size() + (rem > 0 ? 1 : 0)) >= m_vals.max_size())
 		{
 			throw std::invalid_argument("Overflow detected");
@@ -397,11 +499,22 @@ public:
 
 	BigInt operator>>(const uint64_t shift) const
 	{
+		if (IsZero())
+		{
+			return BigInt();
+		}
+		else if (shift == 0)
+		{
+			return *this;
+		}
+
 		BigInt copy;
 
 		const auto quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
-		if (rem >= m_vals.size())
+
+		const uint64_t width = GetBitWidth();
+		if (shift >= width)
 		{
 			return copy;
 		}
@@ -433,7 +546,7 @@ public:
 		bool bigger = false;
 		if (m_vals.size() == other.m_vals.size())
 		{
-			for (size_t i = m_vals.size() - 1; i <= 0; --i)
+			for (size_t i = m_vals.size() - 1;; --i)
 			{
 				if (m_vals[i] > other.m_vals[i])
 				{
@@ -496,12 +609,12 @@ public:
 
 	bool operator<=(const BigInt& other) const
 	{
-		return !(*this >= other);
+		return !(*this > other);
 	}
 
 	bool operator<(const BigInt& other) const
 	{
-		return !(*this > other);
+		return !(*this >= other);
 	}
 
 	bool operator!=(const BigInt& other) const
@@ -536,21 +649,26 @@ public:
 
 	std::string toHex() const
 	{
+		if (IsZero())
+		{
+			return "0x0";
+		}
+
 		std::string ret;
 		ret.append("0x");
 		bool nonZeroAdded = false;
 		for (int i = m_vals.size() - 1; i >= 0; --i)
 		{
-			for (int quadNro = (sizeof(Base) * 2) - 1; quadNro >= 0; --quadNro)
+			for (int nibbleNro = (sizeof(Base) * 2) - 1; nibbleNro >= 0; --nibbleNro)
 			{
-				const Base mask = (0xF << (quadNro * 4));
-				const int quad = (m_vals[i] & mask) >> (quadNro * 4);
-				if (!nonZeroAdded && quad == 0)
+				const Base mask = (0xF << (nibbleNro * 4));
+				const int nibble = (m_vals[i] & mask) >> (nibbleNro * 4);
+				if (!nonZeroAdded && nibble == 0)
 				{
 					continue;
 				}
 				nonZeroAdded = true;
-				ret += NumToChar(quad);
+				ret += NumToChar(char(nibble));
 			}
 		}
 		if (!nonZeroAdded)
@@ -560,10 +678,81 @@ public:
 		return ret;
 	}
 
+	bool IsZero() const
+	{
+		if (m_vals.size() == 0
+			|| (m_vals.size() == 1
+				&& m_vals[0] == 0))
+		{
+			return true;
+		}
+		return false;
+	}
+
+	bool IsOdd() const
+	{
+		if (IsZero())
+		{
+			return false;
+		}
+		return (m_vals[0] & 1) == 1;
+	}
+
 private:
+	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const
+	{
+		if (IsZero())
+		{
+			throw std::invalid_argument("Division by zero");
+		}
+
+		rem = BigInt(*this);
+
+		while (rem >= div)
+		{
+			uint64_t shift = rem.GetBitWidth() - div.GetBitWidth();
+			BigInt divisor = div << shift;
+			while (divisor > rem)
+			{
+				divisor = divisor >> 1;
+				--shift;
+			}
+			if ((divisor << 1) < rem)
+			{
+				divisor = divisor << 1;
+			}
+
+			if (pQuot)
+			{
+				pQuot->SetBit(shift);
+			}
+			rem = rem - divisor;
+		}
+	}
+
+	void SetBit(const uint64_t bitNo)
+	{
+		const uint64_t elementNo = (bitNo / (sizeof(Base) * 8));
+		const size_t bitNoInElement = (bitNo % (sizeof(Base) * 8));
+
+		if (elementNo >= m_vals.size())
+		{
+			// Size needs to be increased
+			if (elementNo >= m_vals.max_size())
+			{
+				throw std::invalid_argument("Overflow detected");
+			}
+
+			// elementNo is an index starting from 0 -> add 1
+			m_vals.resize(size_t(elementNo + 1), 0);
+		}
+
+		m_vals[size_t(elementNo)] |= (1 << bitNoInElement);
+	}
+
 	uint64_t GetBitWidth() const
 	{
-		if (m_vals.size() > 0)
+		if (!IsZero())
 		{
 			uint64_t count = (m_vals.size() - 1) * (sizeof(Base) * 8);
 
@@ -594,11 +783,11 @@ private:
 	bool IsBase2(uint64_t& base) const
 	{
 		uint64_t t = 0;
-		if (m_vals.size() == 0)
+		if (IsZero())
 		{
 			return false;
 		}
-		
+
 		bool bitFound = false;
 		for (const Base v : m_vals)
 		{
@@ -647,6 +836,19 @@ private:
 				break;
 			}
 		}
+	}
+
+	template<typename T>
+	void FromNum(const T val)
+	{
+		const size_t chunks = sizeof(T) / sizeof(Base);
+		m_vals.resize((chunks == 0 ? 1 : chunks), 0);
+		for (size_t i = 0; i < m_vals.size(); ++i)
+		{
+			const auto shift = sizeof(Base) * 8 * i;
+			m_vals[i] = Base(val >> shift);
+		}
+		CleanPreceedingZeroes();
 	}
 
 private:
