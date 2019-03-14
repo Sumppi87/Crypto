@@ -270,22 +270,53 @@ public:
 			return *this;
 		}
 
-		BigInt divisor(other);
-		BigInt copy(*this);
-		const uint64_t bitCount = GetBitCount() - other.GetBitCount();
-		const auto chunks = 1 + ((bitCount - 1) / (sizeof(Base) * 8));
-		
-		const size_t shift = size_t((bitCount % chunks) - 1);
+		BigInt remainder(*this);
 
-		BigInt mod;
-		mod.m_vals.resize(size_t(chunks), 0);
-		Base value = Base(1 << shift);
-		mod.m_vals[size_t(chunks) - 1] = value;
-		/*while ((*this) >= other)
+		while (remainder > other)
 		{
-			(*this) - other;
-		}*/
-		return *this;
+			const uint64_t shift = remainder.GetBitWidth() - other.GetBitWidth();
+			BigInt divisor = other << shift;
+			if (divisor >= remainder)
+			{
+				divisor = divisor >> 1;
+			}
+			remainder = remainder - divisor;
+		}
+		return remainder;
+	}
+
+	BigInt operator/(const BigInt& other) const
+	{
+		if (other.m_vals.size() == 0
+			|| (other.m_vals.size() == 1
+				&& other.m_vals[0] == 0))
+		{
+			throw std::invalid_argument("Division by zero");
+		}
+
+		uint64_t base = 0;
+		if (other.IsBase2(base))
+		{
+			// If the divisor is base-2, a simple shift will do
+			return *this >> base;
+		}
+		
+		BigInt remainder(*this);
+		BigInt quot;
+
+		while (remainder > other)
+		{
+			uint64_t shift = remainder.GetBitWidth() - other.GetBitWidth();
+			BigInt divisor = other << shift;
+			if (divisor >= remainder)
+			{
+				divisor = divisor >> 1;
+				--shift;
+			}
+			quot = quot + BigInt(Base(1)) << shift;
+			remainder = remainder - divisor;
+		}
+		return quot;
 	}
 
 	BigInt operator*(const BigInt& other) const
@@ -325,26 +356,30 @@ public:
 		}
 	}
 
-	BigInt operator<<(const int shift) const
+	BigInt operator<<(const uint64_t shift) const
 	{
 		BigInt copy;
 
-		const auto quot = (shift / (sizeof(Base) * 8));
+		const uint64_t quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
-
-		if (rem == 0)
+		
+		if ((quot + m_vals.size() + (rem > 0 ? 1 : 0)) >= m_vals.max_size())
+		{
+			throw std::invalid_argument("Overflow detected");
+		}
+		else if (rem == 0)
 		{
 			// Add elements by the given quotient
-			copy.m_vals.resize(quot, 0);
+			copy.m_vals.resize(size_t(quot), 0);
 
 			// Simpler case, just add elements after added zeroes
-			copy.m_vals.insert(copy.m_vals.begin() + quot, m_vals.begin(), m_vals.end());
+			copy.m_vals.insert(copy.m_vals.begin() + size_t(quot), m_vals.begin(), m_vals.end());
 		}
 		else
 		{
 			// Size of m_vals is incremented by quotient and possibly by one due to remainder
 			// -> Shifting last element can go into the +1 element
-			copy.m_vals.resize(m_vals.size() + quot + 1, 0);
+			copy.m_vals.resize(m_vals.size() + size_t(quot) + 1, 0);
 
 			for (size_t i = 0; i <= m_vals.size(); ++i)
 			{
@@ -353,36 +388,40 @@ public:
 
 				Base val = (i < m_vals.size()) ? m_vals[i] : 0;
 				val = val << rem;
-				copy.m_vals[i + quot] = val | valLower;
+				copy.m_vals[i + size_t(quot)] = val | valLower;
 			}
 			copy.CleanPreceedingZeroes();
 		}
 		return copy;
 	}
 
-	BigInt operator>>(const int shift) const
+	BigInt operator>>(const uint64_t shift) const
 	{
 		BigInt copy;
 
 		const auto quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
-		if (rem == 0)
+		if (rem >= m_vals.size())
+		{
+			return copy;
+		}
+		else if (rem == 0)
 		{
 			// Simpler case, just drop elements from the start
-			copy.m_vals = std::vector<Base>(m_vals.begin() + quot, m_vals.end());
+			copy.m_vals = std::vector<Base>(m_vals.begin() + size_t(quot), m_vals.end());
 		}
 		else
 		{
 			// More complicated as the shift crosses element (in m_vals) boundaries
 
-			copy.m_vals.resize(m_vals.size() - quot, 0);
+			copy.m_vals.resize(m_vals.size() - size_t(quot), 0);
 
-			for (auto i = quot; i < m_vals.size(); ++i)
+			for (size_t i = size_t(quot); i < m_vals.size(); ++i)
 			{
-				const Base val = (m_vals[i] >> rem);
+				const Base val = (m_vals[i] >> uint32_t(rem));
 				Base upperVal = ((i + 1) < m_vals.size()) ? m_vals[i + 1] : 0;
 				upperVal = upperVal << ((sizeof(Base) * 8) - rem);
-				copy.m_vals[i - quot] = val | upperVal;
+				copy.m_vals[i - size_t(quot)] = val | upperVal;
 			}
 			copy.CleanPreceedingZeroes();
 		}
@@ -391,18 +430,26 @@ public:
 
 	bool operator>(const BigInt& other) const
 	{
-		bool bigger = true;
+		bool bigger = false;
 		if (m_vals.size() == other.m_vals.size())
 		{
 			for (size_t i = m_vals.size() - 1; i <= 0; --i)
 			{
-				if (!(m_vals[i] > other.m_vals[i]))
+				if (m_vals[i] > other.m_vals[i])
+				{
+					bigger = true;
+					break;
+				}
+				else if (m_vals[i] < other.m_vals[i])
 				{
 					break;
 				}
+				// Current elements are equal, continue to the next
 
 				if (i == 0)
 				{
+					// Last element, still equal -> not bigger
+					bigger = false;
 					break;
 				}
 			}
@@ -419,16 +466,23 @@ public:
 		bool greaterOrEqual = true;
 		if (m_vals.size() == other.m_vals.size())
 		{
-			for (size_t i = m_vals.size() - 1; i <= 0; --i)
+			for (size_t i = m_vals.size() - 1;; --i)
 			{
-				if (!(m_vals[i] >= other.m_vals[i]))
+				if (m_vals[i] > other.m_vals[i])
+				{
+					greaterOrEqual = true;
+					break;
+				}
+				else if (m_vals[i] < other.m_vals[i])
 				{
 					greaterOrEqual = false;
 					break;
 				}
+				// Current elements are equal, continue to the next
 
 				if (i == 0)
 				{
+					greaterOrEqual = true;
 					break;
 				}
 			}
@@ -507,7 +561,7 @@ public:
 	}
 
 private:
-	uint64_t GetBitCount() const
+	uint64_t GetBitWidth() const
 	{
 		if (m_vals.size() > 0)
 		{
