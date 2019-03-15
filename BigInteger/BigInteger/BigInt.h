@@ -224,46 +224,56 @@ public:
 	}
 
 	BigInt()
+		: m_sign(Sign::POS)
 	{
 		m_vals.push_back(0);
 	}
 
 	BigInt(const BigInt& other)
 		: m_vals(other.m_vals)
+		, m_sign(other.m_sign)
 	{
 
 	}
 
 	BigInt(const uint8_t val)
+		: m_sign(Sign::POS)
 	{
 		FromNum(val);
 	}
 
 	BigInt(const uint16_t val)
+		: m_sign(Sign::POS)
 	{
 		FromNum(val);
 	}
 
 	BigInt(const uint32_t val)
+		: m_sign(Sign::POS)
 	{
 		FromNum(val);
 	}
 
 	BigInt(const uint64_t val)
+		: m_sign(Sign::POS)
 	{
 		FromNum(val);
 	}
 
 	BigInt(const int val)
+		: m_sign(val < 0 ? Sign::NEG : Sign::POS)
 	{
-		if (val < 0)
-		{
-			throw std::invalid_argument("Initializing with a negative number!");
-		}
-		FromNum((uint32_t)val);
+		FromNum(val < 0 ? uint32_t(-val) : (uint32_t)val);
+	}
+
+	BigInt(const int64_t val)
+		: m_sign(val < 0 ? Sign::NEG : Sign::POS)
+	{
+		FromNum(val < 0 ? uint64_t(-val) : (uint64_t)val);
 	}
 
 	BigInt(const char* input)
+		: m_sign(Sign::POS)
 	{
 		if (input == nullptr)
 		{
@@ -274,7 +284,15 @@ public:
 		{
 			throw std::invalid_argument("Not a valid input");
 		}
-		if (length > 3 && input[0] == '0' && input[1] == 'x')
+		if (input[0] == '-')
+		{
+			// It's a negative number
+			++input;
+			--length;
+			m_sign = Sign::NEG;
+		}
+
+		if (length > 2 && input[0] == '0' && input[1] == 'x')
 		{
 			*this = FromBase16(input);
 		}
@@ -290,7 +308,7 @@ public:
 		BigInt remainder;
 	};
 
-	DivRes Div(const BigInt& div)
+	DivRes Div(const BigInt& div) const
 	{
 		DivRes res;
 		Div(div, res.remainder, &res.quotient);
@@ -299,27 +317,53 @@ public:
 
 	BigInt operator+(const BigInt& other) const
 	{
-		if (!other.IsZero())
+		if (other.IsZero())
 		{
-			BigInt copy;
-			const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
-			copy.m_vals.resize(s, 0);
-			const size_t size = m_vals.size();
-			const size_t size2 = other.m_vals.size();
-
-			for (size_t i = 0; i < size || i < size2; ++i)
-			{
-				const Mul val1 = i < size ? m_vals[i] : 0;
-				const Mul val2 = i < size2 ? other.m_vals[i] : 0;
-				MulUtil<Base, Mul> sum(val1 + val2);
-				AddResult(copy.m_vals, sum, i);
-			}
-
-			copy.CleanPreceedingZeroes();
-
-			return copy;
+			return *this;
 		}
-		return *this;
+		else if (IsPositive() == other.IsPositive())
+		{
+			// Both have the same sign, so no sign change -> just sum them
+			BigInt sum = SumWithoutSign(other);
+			sum.m_sign = m_sign;
+			return sum;
+		}
+		else
+		{
+			// Values have different signs -> Sign might change
+			const Comparison c = CompareWithoutSign(other);
+			if (c == Comparison::EQUAL)
+			{
+				// Result is always zero
+				return BigInt(0);
+			}
+			else
+			{
+				// *this is bigger
+				if (c == Comparison::GREATER)
+				{
+					// As *this is bigger, substract 'other' from *this
+					BigInt res = SubstractWithoutSign(other);
+
+					// Resulting sign is comes always from *this
+					//  1) -20 + 15 = -5
+					//  2) 20 - 15 = 5
+					res.m_sign = m_sign;
+					return res;
+				}
+				else
+				{
+					// As other is bigger, substract *this from 'other'
+					BigInt res = other.SubstractWithoutSign(*this);
+
+					// Resulting sign is comes always from 'other'
+					//  1) 15 - 20 = -5
+					//  2) -15 + 20 = 5
+					res.m_sign = other.m_sign;
+					return res;
+				}
+			}
+		}
 	}
 
 	BigInt operator-(const BigInt& other) const
@@ -328,27 +372,56 @@ public:
 		{
 			return *this;
 		}
-		else if (other > *this)
+		else if (IsZero())
 		{
-			throw std::logic_error("Decrement would overflow");
+			// *this is zero, just flip the sign of 'other'
+			BigInt res(other);
+
+			// 'other' is positive -> result is negative and wise-versa
+			res.m_sign = other.IsPositive() ? Sign::NEG : Sign::POS;
+			return res;
 		}
-
-		BigInt copy;
-		copy.m_vals.resize(m_vals.size(), 0);
-		const size_t size = m_vals.size();
-		const size_t size2 = other.m_vals.size();
-
-		for (size_t i = 0; i < m_vals.size(); ++i)
+		else if (IsPositive() ^ other.IsPositive()) // Check with XOR that signs are not the same
 		{
-			const Base val1 = ~Base(i < size ? m_vals[i] : 0);
-			const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
-			MulUtil<Base, Mul> sum(Mul(val1) + Mul(val2));
-			AddResult(copy.m_vals, sum, i);
-			copy.m_vals[i] = ~copy.m_vals[i];
+			// Values can be summed as
+			// 1) *this is positive and 'other' is negative (e.g. 17 - (-9) = 26)
+			//  -> Sum the values and sign is Sign::POS
+			// 2) *this is negative and 'other' is positive (e.g. -17 - 9 = -26)
+			// -> Sum the values and and sign is Sign::NEG
+			BigInt res = SumWithoutSign(other);
+			res.m_sign = IsPositive() ? Sign::POS : Sign::NEG;
+			return res;
 		}
-		copy.CleanPreceedingZeroes();
-
-		return copy;
+		else
+		{
+			// Signs are the same
+			const Comparison c = CompareWithoutSign(other);
+			if (c == Comparison::EQUAL)
+			{
+				// Absolute values are the same -> Always zero as sign is the same
+				// 1) Signs are negative: -17 - (-17) = -17 + 17 = 0
+				// 2) Signs are positive: 17 - 17 = 0
+				return BigInt(0);
+			}
+			else if (c == Comparison::GREATER)
+			{
+				// *this is bigger -> Always decrement from *this and set the sign from *this
+				// 1) Signs are negative: -20 - (-5) = -20 + 5 = -15
+				// 2) Signs are positive: 20 - 5 = 15
+				BigInt res = SubstractWithoutSign(other);
+				res.m_sign = m_sign;
+				return res;
+			}
+			else
+			{
+				// *this is smaller -> Always decrement from 'other' and set the sign flipped
+				// 1) Signs are negative: -5 - (-20) = -5 + 20 = 15
+				// 2) Signs are positive: 5 - 20 = -15
+				BigInt res = other.SubstractWithoutSign(*this);
+				res.m_sign = IsPositive() ? Sign::NEG : Sign::POS;
+				return res;
+			}
+		}
 	}
 
 	BigInt operator%(const BigInt& other) const
@@ -357,13 +430,17 @@ public:
 		{
 			throw std::invalid_argument("Division by zero");
 		}
-		else if (*this < other)
+		else if (CompareWithoutSign(other) == Comparison::LESSER)
 		{
-			return *this;
+			// Not strictly how C++ behaves... (%-operator can return negative numbers)
+			BigInt rem(*this);
+			rem.m_sign = Sign::POS;
+			return rem;
 		}
 
 		BigInt remainder;
 		Div(other, remainder, nullptr);
+		remainder.m_sign = Sign::POS;
 		return remainder;
 	}
 
@@ -377,28 +454,44 @@ public:
 		else if (other.IsBase2(base))
 		{
 			// If the divisor is base-2, a simple shift will do
-			return *this >> base;
+			BigInt quotient = *this >> base;
+			quotient.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+			return quotient;
 		}
 
 		BigInt remainder;
 		BigInt quot;
 		Div(other, remainder, &quot);
+		quot.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+
 		return quot;
 	}
 
 	BigInt operator*(const BigInt& other) const
 	{
+		uint64_t base = 0;
 		if (IsZero() || other.IsZero())
 		{
 			return BigInt();
 		}
+		else if (other.IsBase2(base))
+		{
+			// If the divisor is base-2, a simple shift will do
+			BigInt res = *this << base;
+
+			// When sigsn are the same, result is always positive, otherwise negative
+			res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+			return res;
+		}
 		else
 		{
-			const auto s = m_vals.size() + other.m_vals.size();
-			BigInt copy;
-			copy.m_vals.resize(s, 0);
+			const auto neededSize = m_vals.size() + other.m_vals.size();
+			BigInt res;
 
-			BigInt test = (copy >> 1);
+			// When sigsn are the same, result is always positive, otherwise negative
+			res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+			res.m_vals.resize(neededSize, 0);
+
 			const std::vector<Base>& multiplier = m_vals.size() <= other.m_vals.size() ? m_vals : other.m_vals;
 			const std::vector<Base>& multiplied = m_vals.size() > other.m_vals.size() ? m_vals : other.m_vals;
 
@@ -413,21 +506,26 @@ public:
 						continue;
 					}
 					MulUtil<Base, Mul> mul(val1 * val2);
-					AddResult(copy.m_vals, mul, i + ii);
+					AddResult(res.m_vals, mul, i + ii);
 				}
 			}
 
-			copy.CleanPreceedingZeroes();
-
-			return copy;
+			res.CleanPreceedingZeroes();
+			return res;
 		}
 	}
 
 	BigInt PowMod(const BigInt& exp, const BigInt& mod) const
 	{
+		if (!exp.IsPositive())
+		{
+			throw std::logic_error("Exponent must be positive number!");
+		}
+
 		BigInt e = exp;
 		BigInt base = *this;
 		BigInt copy = BigInt(1);
+		copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
 
 		while (!e.IsZero())
 		{
@@ -449,6 +547,31 @@ public:
 		return copy;
 	}
 
+	BigInt Pow(const BigInt& exp) const
+	{
+		if (!exp.IsPositive())
+		{
+			throw std::logic_error("Exponent must be positive number!");
+		}
+
+		BigInt e = exp;
+		BigInt base = *this;
+		BigInt copy = BigInt(1);
+		copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
+
+		while (!e.IsZero())
+		{
+			if (e.IsOdd())
+			{
+				copy = copy * base;
+			}
+
+			e = e >> 1;
+			base = base * base;
+		}
+		return copy;
+	}
+
 	BigInt operator<<(const uint64_t shift) const
 	{
 		if (IsZero())
@@ -460,7 +583,9 @@ public:
 			return *this;
 		}
 
+		// Inherits the sign from *this
 		BigInt copy;
+		copy.m_sign = m_sign;
 
 		const uint64_t quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
@@ -507,8 +632,16 @@ public:
 		{
 			return *this;
 		}
+		else if (shift >= (m_vals.size() * sizeof(Base) * 8))
+		{
+			// A quick cursoly check if shift definately bigger than *this
+			// More detailed check is done by checking the actual bit-count if this check is passed
+			return BigInt();
+		}
 
+		// Inherits the sign from *this
 		BigInt copy;
+		copy.m_sign = m_sign;
 
 		const auto quot = (shift / (sizeof(Base) * 8));
 		const auto rem = (shift % (sizeof(Base) * 8));
@@ -543,108 +676,38 @@ public:
 
 	bool operator>(const BigInt& other) const
 	{
-		bool bigger = false;
-		if (m_vals.size() == other.m_vals.size())
-		{
-			for (size_t i = m_vals.size() - 1;; --i)
-			{
-				if (m_vals[i] > other.m_vals[i])
-				{
-					bigger = true;
-					break;
-				}
-				else if (m_vals[i] < other.m_vals[i])
-				{
-					break;
-				}
-				// Current elements are equal, continue to the next
-
-				if (i == 0)
-				{
-					// Last element, still equal -> not bigger
-					bigger = false;
-					break;
-				}
-			}
-		}
-		else
-		{
-			bigger = m_vals.size() > other.m_vals.size();
-		}
-		return bigger;
+		const Comparison c = CompareWithSign(other);
+		return c == Comparison::GREATER;
 	}
 
 	bool operator>=(const BigInt& other) const
 	{
-		bool greaterOrEqual = true;
-		if (m_vals.size() == other.m_vals.size())
-		{
-			for (size_t i = m_vals.size() - 1;; --i)
-			{
-				if (m_vals[i] > other.m_vals[i])
-				{
-					greaterOrEqual = true;
-					break;
-				}
-				else if (m_vals[i] < other.m_vals[i])
-				{
-					greaterOrEqual = false;
-					break;
-				}
-				// Current elements are equal, continue to the next
-
-				if (i == 0)
-				{
-					greaterOrEqual = true;
-					break;
-				}
-			}
-		}
-		else
-		{
-			greaterOrEqual = m_vals.size() > other.m_vals.size();
-		}
-		return greaterOrEqual;
+		const Comparison c = CompareWithSign(other);
+		return c == Comparison::GREATER || c == Comparison::EQUAL;
 	}
 
 	bool operator<=(const BigInt& other) const
 	{
-		return !(*this > other);
+		const Comparison c = CompareWithSign(other);
+		return c == Comparison::LESSER || c == Comparison::EQUAL;
 	}
 
 	bool operator<(const BigInt& other) const
 	{
-		return !(*this >= other);
+		const Comparison c = CompareWithSign(other);
+		return c == Comparison::LESSER;
 	}
 
 	bool operator!=(const BigInt& other) const
 	{
-		return !(*this == other);
+		const Comparison c = CompareWithSign(other);
+		return !(c == Comparison::EQUAL);
 	}
 
 	bool operator==(const BigInt& other) const
 	{
-		bool equal = true;
-		if (m_vals.size() == other.m_vals.size())
-		{
-			for (size_t i = m_vals.size() - 1; i <= 0; --i)
-			{
-				if (!(m_vals[i] == other.m_vals[i]))
-				{
-					break;
-				}
-
-				if (i == 0)
-				{
-					break;
-				}
-			}
-		}
-		else
-		{
-			equal = false;
-		}
-		return equal;
+		const Comparison c = CompareWithSign(other);
+		return c == Comparison::EQUAL;
 	}
 
 	std::string toHex() const
@@ -655,6 +718,11 @@ public:
 		}
 
 		std::string ret;
+		if (!IsPositive())
+		{
+			ret += '-';
+		}
+
 		ret.append("0x");
 		bool nonZeroAdded = false;
 		for (int i = m_vals.size() - 1; i >= 0; --i)
@@ -698,6 +766,11 @@ public:
 		return (m_vals[0] & 1) == 1;
 	}
 
+	bool IsPositive() const
+	{
+		return m_sign == Sign::POS;
+	}
+
 	BigInt GreatestCommonDivisor(const BigInt& other, uint64_t& iters) const
 	{
 		BigInt copy(*this);
@@ -719,12 +792,70 @@ public:
 		}
 	}
 
-	BigInt ModuloMultiplicativeInverse(const BigInt& mod)
+	BigInt ModuloMultiplicativeInverse(const BigInt& M) const
 	{
-		// Assumes that M is a prime number
+		// Assumes that *this and M are co-prime
 		// Returns multiplicative modulo inverse of *this under M
-		return PowMod(mod - 2, mod);
+
+		// Find gcd using Extended Euclid's Algorithm
+		Euclidian res = ExtendedEuclididan(M);
+
+		// In case x is negative, we handle it by adding extra M
+		// Because we know that multiplicative inverse of A in range M lies
+		// in the range [0, M-1]
+		if (!res.x.IsPositive())
+		{
+			res.x = res.x + M;
+		}
+
+		return res.x;
 	}
+
+	struct Euclidian
+	{
+		BigInt gcd;
+		BigInt x;
+		BigInt y;
+	};
+
+	Euclidian ExtendedEuclididan(const BigInt& b) const
+	{
+		BigInt a(*this);
+
+		BigInt s(0);
+		BigInt old_s(1);
+		BigInt t(1);
+		BigInt old_t(0);
+		BigInt r(b);
+		BigInt old_r(a);
+
+		while (!r.IsZero())
+		{
+			BigInt quotient = old_r / r;
+
+			// We are overriding the value of r, before that we store it's current
+			// value in temp variable, later we assign it to old_r
+			BigInt temp(r);
+			r = old_r - quotient * r;
+			old_r = temp;
+
+			// We treat s and t in the same manner we treated r
+			temp = s;
+			s = old_s - quotient * s;
+			old_s = temp;
+
+			temp = t;
+			t = old_t - quotient * t;
+			old_t = temp;
+		}
+
+		Euclidian res;
+		res.gcd = old_r;
+		res.x = old_s;
+		res.y = old_t;
+		return res;
+	}
+
 private:
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const
 	{
@@ -734,26 +865,37 @@ private:
 		}
 
 		rem = BigInt(*this);
+		rem.m_sign = Sign::POS; // Remainder is _always_ positive
 
-		while (rem >= div)
+		if (pQuot)
+		{
+			*pQuot = BigInt(0);
+
+			// When the signs are same, quotient is always positive, otherwise negative
+			//  1) 10 / 5 = 2
+			//  2) -10 / -5 = 2
+			//  3) 10  / -5 = -2
+			//  4) -10 / 5 = -2
+			pQuot->m_sign = IsPositive() == div.IsPositive() ? Sign::POS : Sign::NEG;
+		}
+
+		// Loop until the absolute value of divisor is smaller than remainder
+		while (div.CompareWithoutSign(rem) != Comparison::GREATER)
 		{
 			uint64_t shift = rem.GetBitWidth() - div.GetBitWidth();
 			BigInt divisor = div << shift;
-			while (divisor > rem)
+			while (divisor.CompareWithoutSign(rem) == Comparison::GREATER)
 			{
 				divisor = divisor >> 1;
 				--shift;
-			}
-			if ((divisor << 1) < rem)
-			{
-				divisor = divisor << 1;
 			}
 
 			if (pQuot)
 			{
 				pQuot->SetBit(shift);
 			}
-			rem = rem - divisor;
+
+			rem = rem.SubstractWithoutSign(divisor);
 		}
 	}
 
@@ -878,6 +1020,115 @@ private:
 		CleanPreceedingZeroes();
 	}
 
+	BigInt SumWithoutSign(const BigInt& other) const
+	{
+		BigInt copy;
+		const auto s = std::max(m_vals.size(), other.m_vals.size()) + 1;
+		copy.m_vals.resize(s, 0);
+		const size_t size = m_vals.size();
+		const size_t size2 = other.m_vals.size();
+
+		for (size_t i = 0; i < size || i < size2; ++i)
+		{
+			const Mul val1 = i < size ? m_vals[i] : 0;
+			const Mul val2 = i < size2 ? other.m_vals[i] : 0;
+			MulUtil<Base, Mul> sum(val1 + val2);
+			AddResult(copy.m_vals, sum, i);
+		}
+
+		copy.CleanPreceedingZeroes();
+
+		return copy;
+	}
+
+	BigInt SubstractWithoutSign(const BigInt& other) const
+	{
+		BigInt copy;
+		copy.m_vals.resize(m_vals.size(), 0);
+		const size_t size = m_vals.size();
+		const size_t size2 = other.m_vals.size();
+
+		for (size_t i = 0; i < m_vals.size(); ++i)
+		{
+			const Base val1 = ~Base(i < size ? m_vals[i] : 0);
+			const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
+			MulUtil<Base, Mul> sum(Mul(val1) + Mul(val2));
+			AddResult(copy.m_vals, sum, i);
+			copy.m_vals[i] = ~copy.m_vals[i];
+		}
+		copy.CleanPreceedingZeroes();
+		return copy;
+	}
+
+	enum class Comparison
+	{
+		LESSER,
+		EQUAL,
+		GREATER
+	};
+
+	Comparison CompareWithSign(const BigInt& other) const
+	{
+		if (IsPositive() == other.IsPositive())
+		{
+			// If both are positive compare this* > other
+			// However, if both are negative, reserve the order (as bigger is smaller with negative numbers)
+			return IsPositive() ? CompareWithoutSign(other) : other.CompareWithoutSign(*this);
+		}
+
+		// The sign of *this and other are different
+		// If *this is positive and 'other' is negative and then *this is bigger
+		// If *this is negative and 'other' is positive, then *this is smaller
+		return IsPositive() ? Comparison::GREATER : Comparison::LESSER;
+	}
+
+	// Compares *this to 'other'
+	// If both are equal, function return Comparison::EQUAL
+	// If *this > other, function returns Comparison::GREATER
+	// Comparison::LESSER otherwise
+	Comparison CompareWithoutSign(const BigInt& other) const
+	{
+		Comparison res = Comparison::EQUAL;
+		if (m_vals.size() == other.m_vals.size())
+		{
+			// Sizes are equal
+			for (size_t i = m_vals.size() - 1;; --i)
+			{
+				if (m_vals[i] > other.m_vals[i])
+				{
+					res = Comparison::GREATER;
+					break;
+				}
+				else if (m_vals[i] < other.m_vals[i])
+				{
+					res = Comparison::LESSER;
+					break;
+				}
+				// Current elements are equal, continue to the next
+
+				if (i == 0)
+				{
+					// Values are equal
+					res = Comparison::EQUAL;
+					break;
+				}
+			}
+		}
+		else
+		{
+			// Assuming the leading zeroes have been removed,
+			// it is sufficient to compare only the sizes
+			res = m_vals.size() > other.m_vals.size() ? Comparison::GREATER : Comparison::LESSER;
+		}
+		return res;
+	}
+
 private:
 	std::vector<Base> m_vals;
+	enum Sign
+	{
+		POS = 1,
+		NEG = -1
+	};
+	Sign m_sign;
 };
