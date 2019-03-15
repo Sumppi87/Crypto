@@ -4,9 +4,40 @@
 #include "pch.h"
 #include "BigInt.h"
 #include <iostream>
+#include <iomanip>
+#include <sstream>
+#include <string>
 #include <chrono>
 #include <functional>
 #include "safeint.h"
+
+template< typename T >
+std::string NumToHex(const T num, bool padd)
+{
+	std::stringstream stream;
+	stream << std::setfill('0')
+		<< std::setw(padd ? sizeof(T) * 2 : 0)
+		<< std::hex << num;
+	return stream.str();
+}
+
+std::string GenerateRandomNumber(const uint64_t bytes)
+{
+	std::string res("0x");
+	const auto count = bytes / sizeof(uint32_t);
+	for (auto i = 0; i < count; ++i)
+	{
+		res.append(NumToHex(rand(), true));
+	}
+
+	const size_t bitsInLast = bytes % sizeof(uint32_t);
+	if (bitsInLast > 0)
+	{
+		const auto t = NumToHex(rand(), false);
+		res.append(t.begin(), t.begin() + bitsInLast);
+	}
+	return res;
+}
 
 template <typename Base1, typename Mul1>
 void Compare(const BigInt<Base1, Mul1>& v1, const std::string& h2)
@@ -167,37 +198,69 @@ void TestMulDiv()
 }
 
 template<typename B, typename M>
-void TestOperands(uint64_t v1, uint64_t v2)
+void TestOperands(int64_t v1, int64_t v2)
 {
 	Compare(BigInt<B, M>(v1) * BigInt<B, M>(v2), BigInt<B, M>(v1 * v2));
+	Compare(BigInt<B, M>(v2) * BigInt<B, M>(v1), BigInt<B, M>(v2 * v1));
+
 	Compare(BigInt<B, M>(v1) - BigInt<B, M>(v2), BigInt<B, M>(v1 - v2));
+	Compare(BigInt<B, M>(v2) - BigInt<B, M>(v1), BigInt<B, M>(v2 - v1));
+
 	Compare(BigInt<B, M>(v1) + BigInt<B, M>(v2), BigInt<B, M>(v1 + v2));
+	Compare(BigInt<B, M>(v2) + BigInt<B, M>(v1), BigInt<B, M>(v2 + v1));
 
 	if (v1 == 0 && v2 == 0)
+	{
 		return;
+	}
 	else if (v2 == 0)
+	{
 		std::swap(v1, v2);
-	Compare(BigInt<B, M>(v1) % BigInt<B, M>(v2), BigInt<B, M>(v1 % v2));
-	Compare(BigInt<B, M>(v1) / BigInt<B, M>(v2), BigInt<B, M>(v1 / v2));
+		Compare(BigInt<B, M>(v1) % BigInt<B, M>(v2), BigInt<B, M>(std::abs(v1 % v2)));
+		Compare(BigInt<B, M>(v1) / BigInt<B, M>(v2), BigInt<B, M>(v1 / v2));
+		return;
+	}
+	else if (v1 == 0)
+	{
+		Compare(BigInt<B, M>(v1) % BigInt<B, M>(v2), BigInt<B, M>(std::abs(v1 % v2)));
+		Compare(BigInt<B, M>(v1) / BigInt<B, M>(v2), BigInt<B, M>(v1 / v2));
+		return;
+	}
 
+	Compare(BigInt<B, M>(v1) % BigInt<B, M>(v2), BigInt<B, M>(std::abs(v1 % v2)));
+	Compare(BigInt<B, M>(v2) % BigInt<B, M>(v1), BigInt<B, M>(std::abs(v2 % v1)));
 
-	Compare(BigInt<B, M>(v1) % BigInt<B, M>(v2), BigInt<B, M>(v1 % v2));
 	Compare(BigInt<B, M>(v1) / BigInt<B, M>(v2), BigInt<B, M>(v1 / v2));
+	Compare(BigInt<B, M>(v2) / BigInt<B, M>(v1), BigInt<B, M>(v2 / v1));
+
 }
 
 void TestWithRand()
 {
-	TestOperands<uint8_t, uint16_t>(32538, 986);
-
-	srand(rand());
-	for (uint64_t i = 0; i < 1000; ++i)
+	union Gen
 	{
-		uint64_t v1(rand());
-		uint64_t v2(rand());
-		if (v2 > v1)
+		Gen()
 		{
-			std::swap(v1, v2);
+			t0 = rand() % (UINT8_MAX + 1);
+			t1 = rand() % (UINT8_MAX + 1);
+			t2 = rand() % (UINT8_MAX + 1);
+			t3 = rand() % (UINT8_MAX + 1);
 		}
+
+		int value;
+		struct
+		{
+			uint8_t t0;
+			uint8_t t1;
+			uint8_t t2;
+			uint8_t t3;
+		};
+	};
+
+	for (uint64_t i = 0; i < 100000; ++i)
+	{
+		int64_t v1 = Gen().value;
+		int64_t v2 = Gen().value;
 
 		TestOperands<uint8_t, uint16_t>(v1, v2);
 		TestOperands<uint16_t, uint32_t>(v1, v2);
@@ -205,8 +268,156 @@ void TestWithRand()
 	}
 }
 
+template<typename B, typename M>
+void TestGCD()
+{
+	BigInt<B, M> t1("12131072439211271897323671531612440428472427633701410925634549312301964373042085619324197365322416866541017057361365214171711713797974299334871062829803541");
+	BigInt<B, M> t2("12027524255478748885956220793734512128733387803682075433653899983955179850988797899869146900809131611153346817050832096022160146366346391812470987105415233");
+	std::chrono::high_resolution_clock::time_point s = std::chrono::high_resolution_clock::now();
+
+	uint64_t iters = 0;
+	auto gcd = t1.GreatestCommonDivisor(t2, iters);
+
+	std::chrono::high_resolution_clock::time_point e = std::chrono::high_resolution_clock::now();
+	auto dur = std::chrono::duration_cast<std::chrono::microseconds>(e - s).count();
+
+	std::cout << "Calculating GCD took: "
+		<< dur << "us, with '"
+		<< iters
+		<< "' iterations" << std::endl;
+	std::cout << gcd.toHex() << std::endl;
+}
+
+template<typename B, typename M>
+void Test_RSA()
+{
+	const char* rawData = "Testing testing !";
+	BigInt<B, M> data = BigInt<B, M>::FromRawData(rawData, strlen(rawData));
+	const std::string fromRawData = data.ToRawData();
+
+	BigInt<B, M> p("12131072439211271897323671531612440428472427633701410925634549312301964373042085619324197365322416866541017057361365214171711713797974299334871062829803541");
+	BigInt<B, M> q("12027524255478748885956220793734512128733387803682075433653899983955179850988797899869146900809131611153346817050832096022160146366346391812470987105415233");
+
+	BigInt<B, M> n = p * q;
+	BigInt<B, M> t = (p - 1) * (q - 1);
+
+	BigInt<B, M> e(65537);
+	uint64_t iters = 0;
+	while (n.GreatestCommonDivisor(e, iters) != 1)
+	{
+		e = e + 1;
+		std::cout << "Booboo" << std::endl;
+	}
+	// public-key(e, n)
+	BigInt<B, M> d = e.ModuloMultiplicativeInverse(t);
+
+	/*
+	Encryption:
+
+		m^e mod n
+		Decryption:
+
+		c^d mod n
+	*/
+	std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
+	BigInt<B, M> encrypted = data.PowMod(e, n);
+	std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
+
+	const std::string encryptedData = encrypted.ToRawData();
+
+	std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
+	BigInt<B, M> decrypted = encrypted.PowMod(d, n);
+	std::chrono::high_resolution_clock::time_point decryption_end = std::chrono::high_resolution_clock::now();
+
+	auto encryption = std::chrono::duration_cast<std::chrono::milliseconds>(encryption_end - encryption_start).count();
+	auto decryption = std::chrono::duration_cast<std::chrono::milliseconds>(decryption_end - decryption_start).count();
+
+	std::cout << "Encryption took :" << encryption << "ms" << std::endl;
+	std::cout << "Decryption took :" << decryption << "ms" << std::endl;
+
+	const std::string decryptedData = decrypted.ToRawData();
+
+	{
+		// yeaah
+		std::cout << "Successfully encrypted '" << rawData << "'"
+			<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
+	}
+
+	if (decryptedData != rawData)
+	{
+		std::cout << "Something went wrong, somewhere.." << std::endl;
+	}
+}
+
+template<typename B, typename M>
+void RSA_Small()
+{
+	BigInt<B, M> p(11);
+	BigInt<B, M> q(13);
+
+	BigInt<B, M> n = p * q;
+	BigInt<B, M> t = (p - 1) * (q - 1);
+
+	BigInt<B, M> e(7);
+	uint64_t iters = 0;
+	while (n.GreatestCommonDivisor(e, iters) != 1)
+	{
+		e = e + 1;
+		std::cout << "Booboo" << std::endl;
+	}
+	// public-key(e, n)
+	BigInt<B, M> d = e.ModuloMultiplicativeInverse(t);
+
+	const char* rawData = "Testing testing !";
+	BigInt<B, M> data = BigInt<B, M>::FromRawData(rawData, strlen(rawData));
+	const std::string fromRawData = data.ToRawData();
+
+
+	std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
+	BigInt<B, M> encrypted = data.PowMod(e, n);
+	std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
+
+	const std::string encryptedData = encrypted.ToRawData();
+
+	std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
+	BigInt<B, M> decrypted = encrypted.PowMod(d, n);
+	std::chrono::high_resolution_clock::time_point decryption_end = std::chrono::high_resolution_clock::now();
+
+	auto encryption = std::chrono::duration_cast<std::chrono::microseconds>(encryption_end - encryption_start).count();
+	auto decryption = std::chrono::duration_cast<std::chrono::microseconds>(decryption_end - decryption_start).count();
+
+	std::cout << "Encryption took :" << encryption << "us" << std::endl;
+	std::cout << "Decryption took :" << decryption << "us" << std::endl;
+
+	const std::string decryptedData = decrypted.ToRawData();
+
+	if (decryptedData == rawData)
+	{
+		// yeaah
+		std::cout << "Successfully encrypted '" << rawData << "'"
+			<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
+	}
+	else
+	{
+		std::cout << "Something went wrong, somewhere.." << std::endl;
+	}
+}
+
 int main()
 {
+	RSA_Small<uint8_t, uint16_t>();
+	RSA_Small<uint16_t, uint32_t>();
+	RSA_Small<uint32_t, uint64_t>();
+	
+	Test_RSA<uint8_t, uint16_t>();
+	Test_RSA<uint16_t, uint32_t>();
+	Test_RSA<uint32_t, uint64_t>();
+
+	return 0;
+
+	TestGCD<uint8_t, uint16_t>();
+	TestGCD<uint16_t, uint32_t>();
+	TestGCD<uint32_t, uint64_t>();
 	auto a = BigInt<uint8_t, uint16_t>(6298) % BigInt<uint8_t, uint16_t>(6298);
 	BigInt<uint8_t, uint16_t> res("0x299");
 	auto t = res.PowMod("0x10", "0x123");
