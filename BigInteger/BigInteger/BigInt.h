@@ -698,6 +698,33 @@ public:
 		return (m_vals[0] & 1) == 1;
 	}
 
+	BigInt GreatestCommonDivisor(const BigInt& other, uint64_t& iters) const
+	{
+		BigInt copy(*this);
+		BigInt div(other);
+		while (1)
+		{
+			++iters;
+			if (div.IsZero())
+			{
+				return copy;
+			}
+
+			copy = copy % div;
+			if (copy.IsZero())
+			{
+				return div;
+			}
+			div = div % copy;
+		}
+	}
+
+	BigInt ModuloMultiplicativeInverse(const BigInt& mod)
+	{
+		// Assumes that M is a prime number
+		// Returns multiplicative modulo inverse of *this under M
+		return PowMod(mod - 2, mod);
+	}
 private:
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const
 	{
