@@ -139,6 +139,31 @@ class BigInt
 	static_assert(std::is_unsigned<Mul>::value, "Base must be unsigned int");
 public:
 
+	static BigInt FromRawData(const char* data, const size_t length)
+	{
+		BigInt res;
+
+		const auto chunks = length / sizeof(Base);
+		const auto leftOver = length % sizeof(Base);
+		res.m_vals.resize(chunks + (leftOver > 0 ? 1 : 0), 0);
+
+		size_t readChars = 0;
+		for (size_t i = 0; i < res.m_vals.size(); ++i)
+		{
+			for (size_t charPos = 0
+				; readChars < length && charPos < sizeof(Base)
+				; ++charPos, ++readChars)
+			{
+				const auto shift = charPos * 8;
+				const char c = data[readChars];
+				const Base shiftedC = (Base(c) << shift);
+				res.m_vals[i] |= shiftedC;
+			}
+		}
+
+		return res;
+	}
+
 	static BigInt FromBase10(const char* input)
 	{
 		if (input == nullptr)
@@ -743,6 +768,31 @@ public:
 		{
 			ret += NumToChar(0);
 		}
+		return ret;
+	}
+
+	std::string ToRawData() const
+	{
+		std::string ret;
+
+		for (size_t i = 0; i < m_vals.size(); ++i)
+		{
+			for (size_t charPos = 0; charPos < sizeof(Base); ++charPos)
+			{
+				const Base mask = (0xFF << (charPos * 8));
+				const auto shift = (charPos * 8);
+				const char c = static_cast<const char>((m_vals[i] & mask) >> shift);
+
+				if (i == (m_vals.size() - 1)
+					&& c == 0)
+				{
+					// The last element may contain null's, depending on source data and sizeof(Base)
+					continue;
+				}
+				ret += c;
+			}
+		}
+
 		return ret;
 	}
 
