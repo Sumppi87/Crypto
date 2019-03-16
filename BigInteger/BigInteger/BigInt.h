@@ -5,6 +5,8 @@
 #define USE_64BIT_IF_POSSIBLE
 //#define TEST
 
+#define MAX_SIZE 64
+
 class BigInt
 {
 public:
@@ -32,15 +34,6 @@ public:
 	BigInt(const uint64_t val);
 	BigInt(const int64_t val);
 	BigInt(const char* input);
-
-	/*struct DivRes
-	{
-		BigInt quotient;
-		BigInt remainder;
-	};
-
-	DivRes Div(const BigInt& div) const;
-	*/
 
 	BigInt operator+(const BigInt& other) const;
 	BigInt operator-(const BigInt& other) const;
@@ -73,6 +66,8 @@ public:
 	std::string ToRawData() const;
 
 	bool IsZero() const;
+
+	bool IsOne() const;
 
 	bool IsOdd() const;
 
@@ -116,8 +111,23 @@ private:
 	// Comparison::LESSER otherwise
 	Comparison CompareWithoutSign(const BigInt& other) const;
 
+	void Resize(const size_t size);
+
+	inline size_t CurrentSize() const
+	{
+		return m_currentSize;
+	}
+
+	// Returns a value starting from MSB (of the whole BigInt)
+	Base MostSignificant() const;
+
+	void CopyFromSrc(const void* src,
+		const size_t count,
+		const size_t copyToIndex);
+
 private:
-	std::vector<Base> m_vals;
+	Base m_vals[MAX_SIZE];
+	size_t m_currentSize;
 
 	enum Sign
 	{
