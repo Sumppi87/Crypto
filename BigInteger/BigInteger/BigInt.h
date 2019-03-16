@@ -5,6 +5,8 @@
 #define USE_64BIT_IF_POSSIBLE
 //#define TEST
 
+#define MAX_SIZE 64
+
 class BigInt
 {
 public:
@@ -116,8 +118,30 @@ private:
 	// Comparison::LESSER otherwise
 	Comparison CompareWithoutSign(const BigInt& other) const;
 
+	void Resize(const size_t size);
+
+	inline size_t CurrentSize() const
+	{
+		return m_currentSize;
+	}
+
+	void CopyFromSrc(const void* src,
+		const size_t count,
+		const size_t copyToIndex);
+
+	enum class ShiftDirection
+	{
+		RIGHT,
+		LEFT
+	};
+
+	const void* GetLeftShiftedPtr(const size_t fromIndex, const unsigned char shift) const;
+	const void* GetRightShiftedPtr(const size_t fromIndex, const unsigned char shift) const;
+
 private:
-	std::vector<Base> m_vals;
+	//std::vector<Base> m_vals;
+	Base m_vals[MAX_SIZE];
+	size_t m_currentSize;
 
 	enum Sign
 	{

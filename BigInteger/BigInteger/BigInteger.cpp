@@ -147,9 +147,6 @@ void Test_ModDiv()
 	{
 		const BigInt numerator("0x109F8F8841FA0197A08DE37ACBFE1DCB211A01");
 		const BigInt div("0x716AFC098");
-		Compare(BigInt("0x109F8F8841FA0197A08DE37ACBFE1DCB211A01") -
-			BigInt("0x0C7D9FFF01AFC0A7A08DE37ACBFE1DCB211A01"),
-			"0x421EF89404A40F00000000000000000000000");
 
 		auto rem = numerator % div;
 		auto quot = numerator / div;
@@ -253,7 +250,7 @@ void TestWithRand()
 		};
 	};
 
-	for (uint64_t i = 0; i < 100000; ++i)
+	for (uint64_t i = 0; i < 10000; ++i)
 	{
 		int64_t v1 = Gen().value;
 		int64_t v2 = Gen().value;
@@ -311,33 +308,36 @@ void Test_RSA()
 
 		c^d mod n
 	*/
-	std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
-	BigInt encrypted = data.PowMod(e, n);
-	std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
-
-	const std::string encryptedData = encrypted.ToRawData();
-
-	std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
-	BigInt decrypted = encrypted.PowMod(d, n);
-	std::chrono::high_resolution_clock::time_point decryption_end = std::chrono::high_resolution_clock::now();
-
-	auto encryption = std::chrono::duration_cast<std::chrono::milliseconds>(encryption_end - encryption_start).count();
-	auto decryption = std::chrono::duration_cast<std::chrono::milliseconds>(decryption_end - decryption_start).count();
-
-	std::cout << "Encryption took :" << encryption << "ms" << std::endl;
-	std::cout << "Decryption took :" << decryption << "ms" << std::endl;
-
-	const std::string decryptedData = decrypted.ToRawData();
-
+	for (int i = 0; i < 100; ++i)
 	{
-		// yeaah
-		std::cout << "Successfully encrypted '" << rawData << "'"
-			<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
-	}
+		std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
+		BigInt encrypted = data.PowMod(e, n);
+		std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
 
-	if (decryptedData != rawData)
-	{
-		std::cout << "Something went wrong, somewhere.." << std::endl;
+		//const std::string encryptedData = encrypted.ToRawData();
+
+		std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
+		BigInt decrypted = encrypted.PowMod(d, n);
+		std::chrono::high_resolution_clock::time_point decryption_end = std::chrono::high_resolution_clock::now();
+
+		auto encryption = std::chrono::duration_cast<std::chrono::microseconds>(encryption_end - encryption_start).count();
+		auto decryption = std::chrono::duration_cast<std::chrono::microseconds>(decryption_end - decryption_start).count();
+
+		std::cout << "Encryption took :" << encryption << "us" << std::endl;
+		std::cout << "Decryption took :" << decryption << "us" << std::endl;
+
+		const std::string decryptedData = decrypted.ToRawData();
+
+		{
+			// yeaah
+			std::cout << "Successfully encrypted '" << rawData << "'"
+				<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
+		}
+
+		if (decryptedData != rawData)
+		{
+			std::cout << "Something went wrong, somewhere.." << std::endl;
+		}
 	}
 }
 
@@ -396,10 +396,38 @@ void RSA_Small()
 
 int main()
 {
+	{
+		BigInt i("0xFEDCBA09876543211234567890ABCDEF");
+		i.GetBitWidth();
+		BigInt one = i << 1;
+		BigInt four = i << 4;
+		BigInt eigth = i << 8;
+		std::cout << i.ToHex() << std::endl;
+		std::cout << one.ToHex() << std::endl;
+		std::cout << four.ToHex() << std::endl;
+		std::cout << eigth.ToHex() << std::endl;
+	}
+	{
+		BigInt i("0x18000000000000001");
+		auto shifted = i >> 1;
+		BigInt test(0x100);
+		BigInt c = test >> 1;
+		BigInt a = test << 64;
+		BigInt b = a >> 64;
+		Compare(test, b);
+	}
 	RSA_Small();
-	
+
+	Compare(BigInt("0x109F8F8841FA0197A08DE37ACBFE1DCB211A01") -
+		BigInt("0x0C7D9FFF01AFC0A7A08DE37ACBFE1DCB211A01"),
+		"0x421EF89404A40F00000000000000000000000");
+
+	Compare(BigInt("98304723987409653892365982365982") - BigInt("89738549738549734985734773498753"),
+		BigInt("8566174248859918906631208867229"));
+
 	Test_RSA();
 
+	return 0;
 	TestGCD();
 	auto a = BigInt(6298) % BigInt(6298);
 	BigInt res("0x299");
