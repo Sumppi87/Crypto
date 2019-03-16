@@ -99,6 +99,65 @@ namespace
 		}
 	}
 
+#ifdef TEST
+	inline unsigned __int64 mulhi(unsigned __int64 a, unsigned __int64 b)
+	{
+		uint64_t a_lo = (uint32_t)a;
+		uint64_t a_hi = a >> 32;
+		uint64_t b_lo = (uint32_t)b;
+		uint64_t b_hi = b >> 32;
+
+		uint64_t a_x_b_hi = a_hi * b_hi;
+		uint64_t a_x_b_mid = a_hi * b_lo;
+		uint64_t b_x_a_mid = b_hi * a_lo;
+		uint64_t a_x_b_lo = a_lo * b_lo;
+
+		uint64_t carry_bit = ((uint64_t)(uint32_t)a_x_b_mid +
+			(uint64_t)(uint32_t)b_x_a_mid +
+			(a_x_b_lo >> 32)) >> 32;
+
+		uint64_t multhi = a_x_b_hi +
+			(a_x_b_mid >> 32) + (b_x_a_mid >> 32) +
+			carry_bit;
+		return multhi;
+	}
+
+	unsigned __int64 _umul128(unsigned __int64 a, unsigned __int64 b, unsigned __int64* pHigh)
+	{
+		*pHigh = mulhi(a, b);
+		return a * b;
+	}
+
+	unsigned char _addcarry_u64(unsigned char c_in, unsigned __int64 a, unsigned __int64 b, unsigned __int64 *sum_out)
+	{
+		const uint32_t a_lo = uint32_t(a);
+		const uint32_t a_hi = uint32_t(a >> 32);
+		const uint32_t b_lo = uint32_t(b);
+		const uint32_t b_hi = uint32_t(b >> 32);
+		const uint64_t lo = a_lo + b_lo + (c_in > 0 ? 1 : 0);
+		const uint64_t hi = a_hi + b_hi;
+
+		*sum_out = ((hi << 32) | lo);
+
+		return (hi >> 32) > 0 ? unsigned char(1) : unsigned char(0);
+	}
+#endif
+
+#if defined (USE_64BIT_VALUES)
+	inline void AddResult(std::vector<uint64_t>& res, const uint64_t val, const uint64_t carry, const size_t index)
+	{
+		// First, handle carry over
+		if (carry)
+		{
+			AddResult(res, carry, 0, index + 1);
+		}
+
+		if (_addcarry_u64(0, val, res[index], &res[index]))
+		{
+			AddResult(res, 1, 0, index + 1);
+		}
+	};
+#else
 	template <typename Base, typename Mul>
 	union MulUtil
 	{
@@ -130,20 +189,6 @@ namespace
 			AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
 		}
 	};
-
-#if not defined(_M_X64)
-	inline uint64_t _umul128(const uint64_t a, const uint64_t b, uint64_t* pHigh)
-	{
-		const uint64_t a_lo = (uint32_t)a;
-		const uint64_t a_hi = a >> 32;
-		const uint64_t b_lo = (uint32_t)b;
-		const uint64_t b_hi = b >> 32;
-
-		uint64_t low = a_lo * b_lo + a_lo * b_hi;
-		*pHigh = a_hi * b_hi + a_hi * b_lo;
-
-		return low;
-	}
 #endif
 }
 
@@ -528,7 +573,12 @@ BigInt BigInt::operator*(const BigInt& other) const
 		{
 			for (size_t ii = 0; ii < multiplied.size(); ++ii)
 			{
-				//_umul128()
+#if defined(USE_64BIT_VALUES)
+				Base carry = 0;
+				const Base mul = _umul128(multiplier[i], multiplied[ii], &carry);
+				AddResult(res.m_vals, mul, carry, i + ii);
+#else
+
 				const Mul val1 = multiplier[i];
 				const Mul val2 = multiplied[ii];
 				if (val1 == 0 || val2 == 0)
@@ -537,6 +587,7 @@ BigInt BigInt::operator*(const BigInt& other) const
 				}
 				MulUtil<Base, Mul> mul(val1 * val2);
 				AddResult(res.m_vals, mul, i + ii);
+#endif
 			}
 		}
 
@@ -759,8 +810,8 @@ std::string BigInt::ToHex() const
 	{
 		for (int nibbleNro = (sizeof(Base) * 2) - 1; nibbleNro >= 0; --nibbleNro)
 		{
-			const Base mask = (0xF << (nibbleNro * 4));
-			const int nibble = (m_vals[i] & mask) >> (nibbleNro * 4);
+			const auto mask = (Base(0xF) << (nibbleNro * 4));
+			const auto nibble = Base(m_vals[i] & mask) >> (nibbleNro * 4);
 			if (!nonZeroAdded && nibble == 0)
 			{
 				continue;
@@ -784,9 +835,10 @@ std::string BigInt::ToRawData() const
 	{
 		for (size_t charPos = 0; charPos < sizeof(Base); ++charPos)
 		{
-			const Base mask = (0xFF << (charPos * 8));
+			const Base mask = (Base(0xFF) << (charPos * 8));
 			const auto shift = (charPos * 8);
-			const char c = static_cast<const char>((m_vals[i] & mask) >> shift);
+			Base c = Base(m_vals[i] & mask);
+			c = (c >> shift);
 
 			if (i == (m_vals.size() - 1)
 				&& c == 0)
@@ -794,7 +846,7 @@ std::string BigInt::ToRawData() const
 				// The last element may contain null's, depending on source data and sizeof(Base)
 				continue;
 			}
-			ret += c;
+			ret += char(c);
 		}
 	}
 
@@ -962,7 +1014,7 @@ void BigInt::SetBit(const uint64_t bitNo)
 		m_vals.resize(size_t(elementNo + 1), 0);
 	}
 
-	m_vals[size_t(elementNo)] |= (1 << bitNoInElement);
+	m_vals[size_t(elementNo)] |= (Base(1) << bitNoInElement);
 }
 
 uint64_t BigInt::GetBitWidth() const
@@ -1075,10 +1127,18 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 
 	for (size_t i = 0; i < size || i < size2; ++i)
 	{
+#if defined(USE_64BIT_VALUES)
+		const Base val1 = i < size ? m_vals[i] : 0;
+		const Base val2 = i < size2 ? other.m_vals[i] : 0;
+		Base sum = 0;
+		const Base carry = _addcarry_u64(0, val1, val2, &sum);
+		AddResult(copy.m_vals, sum, carry, i);
+#else
 		const Mul val1 = i < size ? m_vals[i] : 0;
 		const Mul val2 = i < size2 ? other.m_vals[i] : 0;
 		MulUtil<Base, Mul> sum(val1 + val2);
 		AddResult(copy.m_vals, sum, i);
+#endif
 	}
 
 	copy.CleanPreceedingZeroes();
@@ -1097,8 +1157,14 @@ BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 	{
 		const Base val1 = ~Base(i < size ? m_vals[i] : 0);
 		const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
+#if defined(USE_64BIT_VALUES)
+		Base sum = 0;
+		const Base carry = _addcarry_u64(0, val1, val2, &sum);
+		AddResult(copy.m_vals, sum, carry, i);
+#else
 		MulUtil<Base, Mul> sum(Mul(val1) + Mul(val2));
 		AddResult(copy.m_vals, sum, i);
+#endif
 		copy.m_vals[i] = ~copy.m_vals[i];
 	}
 	copy.CleanPreceedingZeroes();

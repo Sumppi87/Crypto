@@ -2,13 +2,20 @@
 #include <vector>
 #include <string>
 
+#define USE_64BIT_IF_POSSIBLE
+//#define TEST
+
 class BigInt
 {
 public:
-	// TODO: Look into using 64bit values as Base
-	//typedef uint64_t Base;
+
+#if (defined(_M_X64) && defined(USE_64BIT_IF_POSSIBLE)) or defined(TEST)
+	typedef uint64_t Base;
+#define USE_64BIT_VALUES
+#else
 	typedef uint32_t Base;
 	typedef uint64_t Mul;
+#endif
 
 	static BigInt FromRawData(const char* data, const size_t length);
 	static BigInt FromBase10(const char* input);
@@ -111,7 +118,7 @@ private:
 
 private:
 	std::vector<Base> m_vals;
-	
+
 	enum Sign
 	{
 		POS = 1,
