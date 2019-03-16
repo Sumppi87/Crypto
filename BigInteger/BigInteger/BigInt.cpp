@@ -537,7 +537,11 @@ BigInt BigInt::operator/(const BigInt& other) const
 	}
 	else if (other.IsOne())
 	{
-		return *this;
+		BigInt res(*this);
+
+		// When signs are the same, result is always positive, otherwise negative
+		res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+		return res;
 	}
 	else if (other.IsBase2(base))
 	{
@@ -564,11 +568,19 @@ BigInt BigInt::operator*(const BigInt& other) const
 	}
 	else if (IsOne())
 	{
-		return other;
+		BigInt res(other);
+
+		// When signs are the same, result is always positive, otherwise negative
+		res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+		return res;
 	}
 	else if (other.IsOne())
 	{
-		return *this;
+		BigInt res(*this);
+
+		// When signs are the same, result is always positive, otherwise negative
+		res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
+		return res;
 	}
 	else if (other.IsBase2(base))
 	{
@@ -605,16 +617,16 @@ BigInt BigInt::operator*(const BigInt& other) const
 				if (val1 == 0 || val2 == 0)
 				{
 					continue;
-				}
+			}
 				MulUtil<Base, Mul> mul(val1 * val2);
 				AddResult(res.m_vals, mul, i + ii);
 #endif
-			}
 		}
+	}
 
 		res.CleanPreceedingZeroes();
 		return res;
-	}
+}
 }
 
 BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
@@ -769,7 +781,7 @@ BigInt BigInt::operator>>(const uint64_t shift) const
 	else if (rem == 0)
 	{
 		// Simpler case, just drop elements from the start
-		
+
 		copy.Resize(CurrentSize() - quot);
 		copy.CopyFromSrc(&m_vals[quot], CurrentSize() - quot, 0);
 		copy.CleanPreceedingZeroes();
