@@ -125,6 +125,8 @@ private:
 	void FromBase10(const char* input);
 	void FromBase16(const char* hex);
 
+	BigInt(const Base* data, const size_t currentSize);
+
 private:
 	Base m_vals[MAX_SIZE];
 	size_t m_currentSize;

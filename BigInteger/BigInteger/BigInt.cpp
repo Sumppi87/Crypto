@@ -330,72 +330,82 @@ void BigInt::FromBase16(const char* hex)
 BigInt::BigInt()
 	: m_sign(Sign::POS)
 	, m_currentSize(1)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	m_vals[0] = 0;
 }
 
 BigInt::BigInt(const BigInt& other)
 	: m_sign(other.m_sign)
 	, m_currentSize(other.m_currentSize)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	CopyFromSrc(other.m_vals, other.CurrentSize(), 0);
 }
+
+BigInt::BigInt(const Base* data, const size_t currentSize)
+	: m_sign(Sign::POS)
+	, m_currentSize(currentSize)
+	, m_vals{}
+{
+	CopyFromSrc(data, currentSize, 0);
+	CleanPreceedingZeroes();
+}
+
 
 BigInt::BigInt(const uint8_t val)
 	: m_sign(Sign::POS)
 	, m_currentSize(0)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val, sizeof(uint8_t));
 }
 
 BigInt::BigInt(const uint16_t val)
 	: m_sign(Sign::POS)
 	, m_currentSize(0)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val, sizeof(uint16_t));
 }
 
 BigInt::BigInt(const uint32_t val)
 	: m_sign(Sign::POS)
 	, m_currentSize(0)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const uint64_t val)
 	: m_sign(Sign::POS)
 	, m_currentSize(0)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const int val)
 	: m_sign(val < 0 ? Sign::NEG : Sign::POS)
 	, m_currentSize(0)
+	, m_vals{}
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val < 0 ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const int64_t val)
 	: m_sign(val < 0 ? Sign::NEG : Sign::POS)
+	, m_vals{}
 	, m_currentSize(0)
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	FromNum(val < 0 ? uint64_t(-val) : (uint64_t)val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const char* input)
 	: m_sign(Sign::POS)
+	, m_vals{}
 	, m_currentSize(0)
 {
-	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
 	ParseStrInput(input);
 }
 
