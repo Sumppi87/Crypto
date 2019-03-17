@@ -84,6 +84,8 @@ public:
 
 	bool IsBase2(uint64_t& base) const;
 
+	void SetZero();
+
 private:
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const;
 
@@ -96,6 +98,7 @@ private:
 	BigInt SubstractWithoutSign(const BigInt& other) const;
 
 	// In-place helper functions
+	static void Mod(BigInt& rem, const BigInt& div);
 	static void SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend);
 	static void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
 	static void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);

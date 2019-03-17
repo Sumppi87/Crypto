@@ -689,17 +689,12 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 		if (e.IsOdd())
 		{
 			copy = copy * base;
-			copy = copy % mod;
-			//*this *= base;
-			//*this %= mod;
+			Mod(copy, mod);
 		}
 
 		RightShift(e, exp, ++shift);
 		base = base * base;
-		base = base % mod;
-		//e >>= 1;
-		//base *= base;
-		//base %= mod;
+		Mod(base, mod);
 	}
 	return copy;
 }
@@ -1197,6 +1192,14 @@ bool BigInt::IsBase2(uint64_t& base) const
 	return bitFound;
 }
 
+void BigInt::SetZero()
+{
+	m_sign = Sign::POS;
+	memset(m_vals, 0, m_currentSize * sizeof(Base));
+	m_currentSize = 1;
+	m_vals[0] = 0;
+}
+
 void BigInt::CleanPreceedingZeroes()
 {
 	for (auto i = CurrentSize() - 1; i > 0; --i)
@@ -1268,6 +1271,44 @@ BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 	}
 	copy.CleanPreceedingZeroes();
 	return copy;
+}
+
+void BigInt::Mod(BigInt& rem, const BigInt& div)
+{
+	if (div.IsZero())
+	{
+		throw std::invalid_argument("Division by zero");
+	}
+	else if (&div == &rem)
+	{
+		// Aliasing...
+		// Well, taking a modulo from itself is zero
+		rem.SetZero();
+		return;
+	}
+
+	rem.m_sign = Sign::POS; // Remainder is _always_ positive
+
+	BigInt divisor;
+	const uint64_t divBitCount = div.GetBitWidth();
+	// Loop until the absolute value of divisor is smaller than remainder
+	while (div.CompareWithoutSign(rem) != Comparison::GREATER)
+	{
+		uint64_t shift = rem.GetBitWidth() - divBitCount;
+		if (div.MostSignificant() > rem.MostSignificant())
+		{
+			shift--;
+		}
+		LeftShift(divisor, div, shift);
+
+		while (divisor.CompareWithoutSign(rem) == Comparison::GREATER)
+		{
+			divisor = divisor >> 1;
+			--shift;
+		}
+
+		SubstractWithoutSign(rem, divisor);
+	}
 }
 
 void BigInt::SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend)
