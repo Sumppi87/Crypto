@@ -694,7 +694,6 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 			//*this %= mod;
 		}
 
-
 		RightShift(e, exp, ++shift);
 		base = base * base;
 		base = base % mod;
@@ -1130,7 +1129,7 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 			pQuot->SetBit(shift);
 		}
 
-		rem = rem.SubstractWithoutSign(divisor);
+		SubstractWithoutSign(rem, divisor);
 	}
 }
 
@@ -1257,33 +1256,6 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 	return copy;
 }
 
-/*
-BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
-{
-	BigInt copy;
-	copy.Resize(CurrentSize());
-	const size_t size = CurrentSize();
-	const size_t size2 = CurrentSize();
-
-	for (size_t i = 0; i < size; ++i)
-	{
-		const Base val1 = ~Base(i < size ? m_vals[i] : 0);
-		const Base val2 = Base(i < size2 ? other.m_vals[i] : 0);
-#if defined(USE_64BIT_VALUES)
-		Base sum = 0;
-		if (_addcarry_u64(0, val1, val2, &sum))
-			AddResult(&copy.m_vals[i + 1], 1);
-		AddResult(&copy.m_vals[i], sum);
-#else
-		MulUtil<Base, Mul> sum(Mul(val1) + Mul(val2));
-		AddResult(copy.m_vals, sum, i);
-#endif
-		copy.m_vals[i] = ~copy.m_vals[i];
-	}
-	copy.CleanPreceedingZeroes();
-	return copy;
-}
-*/
 
 BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 {
@@ -1298,6 +1270,20 @@ BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 	return copy;
 }
 
+void BigInt::SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend)
+{
+	const size_t size = std::max(minuendRes.CurrentSize(), subtrahend.CurrentSize());
+	for (size_t i = size - 1;;)
+	{
+		const Base val = subtrahend.m_vals[i];
+		SubResult(&minuendRes.m_vals[i], val, 0);
+		if (i != 0)
+			--i;
+		else
+			break;
+	}
+	minuendRes.CleanPreceedingZeroes();
+}
 
 BigInt::Comparison BigInt::CompareWithSign(const BigInt& other) const
 {

@@ -95,6 +95,8 @@ private:
 
 	BigInt SubstractWithoutSign(const BigInt& other) const;
 
+	// In-place helper functions
+	static void SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend);
 	static void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
 	static void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);
 
