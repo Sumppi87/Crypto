@@ -343,15 +343,47 @@ BigInt::BigInt(const BigInt& other)
 	CopyFromSrc(other.m_vals, other.CurrentSize(), 0);
 }
 
+BigInt::BigInt(const BigInt&& move)
+	: m_sign(move.m_sign)
+	, m_currentSize(move.m_currentSize)
+	, m_vals{}
+{
+	CopyFromSrc(move.m_vals, m_currentSize, 0);
+}
+
+BigInt& BigInt::operator=(const BigInt& other)
+{
+	m_sign = other.m_sign;
+
+	// Clear any old values before assigment if *this is larger
+	if (other.m_currentSize < m_currentSize)
+		memset(m_vals, 0, m_currentSize * sizeof(Base));
+
+	m_currentSize = other.m_currentSize;
+	CopyFromSrc(other.m_vals, m_currentSize, 0);
+	return *this;
+}
+
+BigInt& BigInt::operator=(const BigInt&& other)
+{
+	m_sign = other.m_sign;
+
+	// Clear any old values before assigment if *this is larger
+	if (other.m_currentSize < m_currentSize)
+		memset(m_vals, 0, m_currentSize * sizeof(Base));
+
+	m_currentSize = other.m_currentSize;
+	CopyFromSrc(other.m_vals, m_currentSize, 0);
+	return *this;
+}
+
 BigInt::BigInt(const Base* data, const size_t currentSize)
 	: m_sign(Sign::POS)
 	, m_currentSize(currentSize)
 	, m_vals{}
 {
 	CopyFromSrc(data, currentSize, 0);
-	CleanPreceedingZeroes();
 }
-
 
 BigInt::BigInt(const uint8_t val)
 	: m_sign(Sign::POS)

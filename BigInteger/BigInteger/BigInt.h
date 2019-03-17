@@ -20,8 +20,11 @@ public:
 	static BigInt FromString(const char* input);
 
 	BigInt();
-
 	BigInt(const BigInt& other);
+	BigInt(const BigInt&& move);
+	BigInt& operator=(const BigInt& other);
+	BigInt& operator=(const BigInt&& other);
+
 	BigInt(const uint8_t val);
 	BigInt(const uint16_t val);
 	BigInt(const uint32_t val);
