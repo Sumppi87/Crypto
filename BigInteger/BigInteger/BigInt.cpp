@@ -4,9 +4,9 @@
 #include <string>
 #include <cstdlib>
 #include <algorithm>
-#include <bitset>
-#include <intrin.h>
 #include <iostream>
+#include <vector>
+#include <intrin.h>
 #include <immintrin.h>
 
 namespace
@@ -236,8 +236,44 @@ BigInt BigInt::FromRawData(const char* data, const size_t length)
 	return res;
 }
 
-/*static*/
-BigInt BigInt::FromBase10(const char* input)
+BigInt BigInt::FromString(const char* input)
+{
+	return BigInt().ParseStrInput(input);
+}
+
+BigInt& BigInt::ParseStrInput(const char* input)
+{
+	if (input == nullptr)
+	{
+		throw std::invalid_argument("Not a valid input");
+	}
+	auto length = strlen(input);
+	if (length < 1)
+	{
+		throw std::invalid_argument("Not a valid input");
+	}
+	if (input[0] == '-')
+	{
+		// It's a negative number
+		++input;
+		--length;
+		m_sign = Sign::NEG;
+	}
+
+	if (length > 2 && input[0] == '0' && input[1] == 'x')
+	{
+		input += 2;
+		FromBase16(input);
+	}
+	else
+	{
+		FromBase10(input);
+	}
+	CleanPreceedingZeroes();
+	return *this;
+}
+
+void BigInt::FromBase10(const char* input)
 {
 	if (input == nullptr)
 	{
@@ -250,22 +286,17 @@ BigInt BigInt::FromBase10(const char* input)
 	}
 
 	BigInt ten(10);
-	BigInt res;
 
 	for (size_t i = 0; i < length; ++i)
 	{
 		BigInt digit;
 		digit.m_vals[size_t(0)] = CharToNum(input[i], false);
-		res = res * ten;
-		res = res + digit;
+		*this = *this * ten;
+		*this = *this + digit;
 	}
-	res.CleanPreceedingZeroes();
-
-	return res;
 }
 
-/*static*/
-BigInt BigInt::FromBase16(const char* hex)
+void BigInt::FromBase16(const char* hex)
 {
 	if (hex == nullptr)
 	{
@@ -277,11 +308,9 @@ BigInt BigInt::FromBase16(const char* hex)
 		throw std::invalid_argument("Not a valid hexadecimal");
 	}
 
-	BigInt res;
-
 	std::lldiv_t div = std::lldiv(int64_t(length), int64_t((sizeof(Base) * 2)));
 	const size_t neededSize = div.rem == 0 ? div.quot : div.quot + 1;
-	res.Resize(neededSize);
+	Resize(neededSize);
 
 	for (size_t i = length - 1;; --i)
 	{
@@ -290,15 +319,12 @@ BigInt BigInt::FromBase16(const char* hex)
 		const size_t shift = d.rem * 4;
 		const Base val = CharToNum(hex[i], true);
 		const Base shifted = (val << shift);
-		res.m_vals[index] += shifted;
+		m_vals[index] += shifted;
 		if (i == 0)
 		{
 			break;
 		}
 	}
-	res.CleanPreceedingZeroes();
-
-	return res;
 }
 
 BigInt::BigInt()
@@ -370,33 +396,7 @@ BigInt::BigInt(const char* input)
 	, m_currentSize(0)
 {
 	memset(m_vals, 0, MAX_SIZE * sizeof(Base));
-
-	if (input == nullptr)
-	{
-		throw std::invalid_argument("Not a valid input");
-	}
-	auto length = strlen(input);
-	if (length < 1)
-	{
-		throw std::invalid_argument("Not a valid input");
-	}
-	if (input[0] == '-')
-	{
-		// It's a negative number
-		++input;
-		--length;
-		m_sign = Sign::NEG;
-	}
-
-	if (length > 2 && input[0] == '0' && input[1] == 'x')
-	{
-		input += 2;
-		*this = FromBase16(input);
-	}
-	else
-	{
-		*this = FromBase10(input);
-	}
+	ParseStrInput(input);
 }
 
 BigInt BigInt::operator+(const BigInt& other) const

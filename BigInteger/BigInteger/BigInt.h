@@ -1,17 +1,14 @@
 #pragma once
-#include <vector>
 #include <string>
 
 #define USE_64BIT_IF_POSSIBLE
-//#define TEST
-
 #define MAX_SIZE 64
 
 class BigInt
 {
 public:
 
-#if (defined(_M_X64) && defined(USE_64BIT_IF_POSSIBLE)) or defined(TEST)
+#if (defined(_M_X64) && defined(USE_64BIT_IF_POSSIBLE))
 	typedef uint64_t Base;
 #define USE_64BIT_VALUES
 #else
@@ -20,8 +17,7 @@ public:
 #endif
 
 	static BigInt FromRawData(const char* data, const size_t length);
-	static BigInt FromBase10(const char* input);
-	static BigInt FromBase16(const char* hex);
+	static BigInt FromString(const char* input);
 
 	BigInt();
 
@@ -124,6 +120,10 @@ private:
 	void CopyFromSrc(const void* src,
 		const size_t count,
 		const size_t copyToIndex);
+
+	BigInt& ParseStrInput(const char* input);
+	void FromBase10(const char* input);
+	void FromBase16(const char* hex);
 
 private:
 	Base m_vals[MAX_SIZE];
