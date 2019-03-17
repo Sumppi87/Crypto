@@ -95,6 +95,9 @@ private:
 
 	BigInt SubstractWithoutSign(const BigInt& other) const;
 
+	static void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
+	static void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);
+
 	enum class Comparison
 	{
 		LESSER,

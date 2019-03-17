@@ -682,6 +682,7 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 	BigInt base = *this;
 	BigInt copy = BigInt(1);
 	copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
+	uint64_t shift = 0;
 
 	while (!e.IsZero())
 	{
@@ -693,7 +694,8 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 			//*this %= mod;
 		}
 
-		e = e >> 1;
+
+		RightShift(e, exp, ++shift);
 		base = base * base;
 		base = base % mod;
 		//e >>= 1;
@@ -730,131 +732,150 @@ BigInt BigInt::Pow(const BigInt& exp) const
 
 BigInt BigInt::operator<<(const uint64_t shift) const
 {
-	if (IsZero())
+	BigInt copy;
+	LeftShift(copy, *this, shift);
+	return copy;
+}
+
+void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
+{
+	if (target.IsZero())
 	{
-		return BigInt();
+		res = BigInt();
+		return;
 	}
 	else if (shift == 0)
 	{
-		return *this;
+		res = target;
+		return;
 	}
 
-	// Inherits the sign from *this
-	BigInt copy;
-	copy.m_sign = m_sign;
+	// Inherits the sign from target
+	res.m_sign = target.m_sign;
+	memset(res.m_vals, 0, sizeof(Base) * res.m_currentSize);
 
 	const uint64_t quot = (shift / (sizeof(Base) * 8));
 	const unsigned char rem = (shift % (sizeof(Base) * 8));
 
-	if ((quot + CurrentSize() + (rem > 0 ? 1 : 0)) >= MAX_SIZE)
+	if ((quot + target.CurrentSize() + (rem > 0 ? 1 : 0)) >= MAX_SIZE)
 	{
 		throw std::invalid_argument("Overflow detected");
 	}
 	else if (rem == 0)
 	{
 		// Add elements by the given quotient
-		copy.Resize(quot + CurrentSize());
+		res.Resize(quot + target.CurrentSize());
 
 		// Simpler case, just add elements after added zeroes
-		copy.CopyFromSrc(&m_vals[0], CurrentSize(), quot);
-		copy.CleanPreceedingZeroes();
+		res.CopyFromSrc(&target.m_vals[0], target.CurrentSize(), quot);
+		res.CleanPreceedingZeroes();
 	}
 	else if (rem % 8 == 0)
 	{
 		const auto bytesToShift = rem / 8;
-		const auto currSize = CurrentSize();
-		copy.Resize(quot + currSize + 1);
+		const auto currSize = target.CurrentSize();
+		res.Resize(quot + currSize + 1);
 
-		const void* src = &m_vals[0];
-		void* dst = GetShiftedPtr(&copy.m_vals[quot], bytesToShift);
+		const void* src = &target.m_vals[0];
+		void* dst = GetShiftedPtr(&res.m_vals[quot], bytesToShift);
 		auto count = currSize * sizeof(Base);
 		memcpy(dst, src, count);
-		copy.CleanPreceedingZeroes();
+		res.CleanPreceedingZeroes();
 	}
 	else
 	{
-		const auto currSize = CurrentSize();
-		copy.Resize(quot + currSize + 1);
-		
+		const auto currSize = target.CurrentSize();
+		res.Resize(quot + currSize + 1);
+
 		// As a optimization, do the "special cases" outside the for-loop
 		// It has a measurable impact on performance to _not_ have any if-conditions in the loop
-		copy.m_vals[size_t(quot)] = __ll_lshift(m_vals[0], rem);
-		copy.m_vals[currSize + size_t(quot)] = __shiftleft128(m_vals[currSize - 1], 0, rem);
+		res.m_vals[size_t(quot)] = __ll_lshift(target.m_vals[0], rem);
+		res.m_vals[currSize + size_t(quot)] = __shiftleft128(target.m_vals[currSize - 1], 0, rem);
 
 		for (size_t i = 1; i < currSize; ++i)
 		{
-			copy.m_vals[i + size_t(quot)] = __shiftleft128(m_vals[i - 1], m_vals[i], rem);
+			res.m_vals[i + size_t(quot)] = __shiftleft128(target.m_vals[i - 1], target.m_vals[i], rem);
 		}
 
-		copy.CleanPreceedingZeroes();
+		res.CleanPreceedingZeroes();
 	}
-	return copy;
 }
+
 
 BigInt BigInt::operator>>(const uint64_t shift) const
 {
-	if (IsZero())
+	// Inherits the sign from *this
+	BigInt copy;
+	RightShift(copy, *this, shift);
+	return copy;
+}
+
+void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
+{
+	if (target.IsZero())
 	{
-		return BigInt();
+		res = BigInt();
+		return;
 	}
 	else if (shift == 0)
 	{
-		return *this;
+		res = target;
+		return;
 	}
-	else if (shift >= (CurrentSize() * sizeof(Base) * 8))
+	else if (shift >= (target.CurrentSize() * sizeof(Base) * 8))
 	{
-		// A quick cursoly check if shift definately bigger than *this
+		// A quick cursoly check if shift definately bigger than 'target'
 		// More detailed check is done by checking the actual bit-count if this check is passed
-		return BigInt();
+		res = BigInt();
+		return;
 	}
 
-	// Inherits the sign from *this
-	BigInt copy;
-	copy.m_sign = m_sign;
+	// Inherits the sign from 'target'
+	res.m_sign = target.m_sign;
 
 	const auto quot = (shift / (sizeof(Base) * 8));
 	const unsigned char rem = (shift % (sizeof(Base) * 8));
 
-	const uint64_t width = GetBitWidth();
+	const uint64_t width = target.GetBitWidth();
 	if (shift >= width)
 	{
-		return copy;
+		res = BigInt();
+		return;
 	}
 	else if (rem == 0)
 	{
 		// Simpler case, just drop elements from the start
 
-		copy.Resize(CurrentSize() - quot);
-		copy.CopyFromSrc(&m_vals[quot], CurrentSize() - quot, 0);
-		copy.CleanPreceedingZeroes();
+		res.Resize(target.CurrentSize() - quot);
+		res.CopyFromSrc(&target.m_vals[quot], target.CurrentSize() - quot, 0);
+		res.CleanPreceedingZeroes();
 	}
 	else if (rem % 8 == 0)
 	{
 		const auto bytesToShift = rem / 8;
-		const auto currSize = CurrentSize();
-		copy.Resize(currSize - quot);
+		const auto currSize = target.CurrentSize();
+		res.Resize(currSize - quot);
 
-		const void* src = GetShiftedPtr(&m_vals[quot], bytesToShift);
-		void* dst = &copy.m_vals[0];
+		const void* src = GetShiftedPtr(&target.m_vals[quot], bytesToShift);
+		void* dst = &res.m_vals[0];
 		auto count = (currSize * sizeof(Base)) - bytesToShift;
 		memcpy(dst, src, count);
-		copy.CleanPreceedingZeroes();
+		res.CleanPreceedingZeroes();
 	}
 	else
 	{
-		copy.Resize(CurrentSize() - quot);
+		res.Resize(target.CurrentSize() - quot);
 
-		const auto maxIndex = CurrentSize();
+		const auto maxIndex = target.CurrentSize();
 		for (size_t i = size_t(quot); i < maxIndex; ++i)
 		{
-			copy.m_vals[i - size_t(quot)] = __shiftright128(m_vals[i], m_vals[i + 1], rem);
+			res.m_vals[i - size_t(quot)] = __shiftright128(target.m_vals[i], target.m_vals[i + 1], rem);
 		}
 
 		// Shift amount has already been checked -> Cannot overindex
-		copy.m_vals[0] |= __ull_rshift(m_vals[quot], rem);
-		copy.CleanPreceedingZeroes();
+		res.m_vals[0] |= __ull_rshift(target.m_vals[quot], rem);
+		res.CleanPreceedingZeroes();
 	}
-	return copy;
 }
 
 bool BigInt::operator>(const BigInt& other) const
@@ -1086,6 +1107,7 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 		pQuot->m_sign = IsPositive() == div.IsPositive() ? Sign::POS : Sign::NEG;
 	}
 
+	BigInt divisor;
 	const uint64_t divBitCount = div.GetBitWidth();
 	// Loop until the absolute value of divisor is smaller than remainder
 	while (div.CompareWithoutSign(rem) != Comparison::GREATER)
@@ -1095,7 +1117,8 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 		{
 			shift--;
 		}
-		BigInt divisor = div << shift;
+		LeftShift(divisor, div, shift);
+
 		while (divisor.CompareWithoutSign(rem) == Comparison::GREATER)
 		{
 			divisor = divisor >> 1;
