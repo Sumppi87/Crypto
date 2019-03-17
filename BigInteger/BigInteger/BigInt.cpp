@@ -733,17 +733,17 @@ BigInt BigInt::operator<<(const uint64_t shift) const
 	{
 		const auto currSize = CurrentSize();
 		copy.Resize(quot + currSize + 1);
-		for (size_t i = 0; i <= currSize; ++i)
+		
+		// As a optimization, do the "special cases" outside the for-loop
+		// It has a measurable impact on performance to _not_ have any if-conditions in the loop
+		copy.m_vals[size_t(quot)] = __ll_lshift(m_vals[0], rem);
+		copy.m_vals[currSize + size_t(quot)] = __shiftleft128(m_vals[currSize - 1], 0, rem);
+
+		for (size_t i = 1; i < currSize; ++i)
 		{
-			if (i != 0)
-			{
-				copy.m_vals[i + size_t(quot)] = __shiftleft128(m_vals[i - 1], m_vals[i], rem);
-			}
-			else
-			{
-				copy.m_vals[i + size_t(quot)] = __ll_lshift(m_vals[i], rem);
-			}
+			copy.m_vals[i + size_t(quot)] = __shiftleft128(m_vals[i - 1], m_vals[i], rem);
 		}
+
 		copy.CleanPreceedingZeroes();
 	}
 	return copy;
@@ -802,20 +802,14 @@ BigInt BigInt::operator>>(const uint64_t shift) const
 	{
 		copy.Resize(CurrentSize() - quot);
 
-		const auto currSize = CurrentSize();
-		for (size_t i = size_t(quot); i < currSize; ++i)
+		const auto maxIndex = CurrentSize();
+		for (size_t i = size_t(quot); i < maxIndex; ++i)
 		{
-			if ((i + 1) < currSize)
-			{
-				const Base shifted = __shiftright128(m_vals[i], m_vals[i + 1], rem);
-				copy.m_vals[i - size_t(quot)] = shifted;
-			}
-			else
-			{
-				const Base shifted = __ull_rshift(m_vals[i], rem);
-				copy.m_vals[i - size_t(quot)] = shifted;
-			}
+			copy.m_vals[i - size_t(quot)] = __shiftright128(m_vals[i], m_vals[i + 1], rem);
 		}
+
+		// Shift amount has already been checked -> Cannot overindex
+		copy.m_vals[0] |= __ull_rshift(m_vals[quot], rem);
 		copy.CleanPreceedingZeroes();
 	}
 	return copy;
