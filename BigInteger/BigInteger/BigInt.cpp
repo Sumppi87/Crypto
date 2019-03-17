@@ -973,6 +973,55 @@ std::string BigInt::ToHex() const
 	return ret;
 }
 
+std::string BigInt::ToDec() const
+{
+	if (IsZero())
+	{
+		return "0";
+	}
+
+	// Maybe just a bit lazy, but it's easy to convert from hex to dec...
+	std::string hex = ToHex();
+	if (!IsPositive())
+	{
+		hex.erase(hex.begin(), hex.begin() + 3);
+	}
+	else
+	{
+		hex.erase(hex.begin(), hex.begin() + 2);
+	}
+
+	std::vector<int> dec;
+	for (const char c : hex)
+	{
+		unsigned int carry = CharToNum(c, true);
+
+		for (auto i = 0; i < dec.size(); ++i)
+		{
+			int val = dec[i] * 16 + carry;
+			dec[i] = val % 10;
+			carry = val / 10;
+		}
+		while (carry > 0)
+		{
+			dec.push_back(carry % 10);
+			carry /= 10;
+		}
+	}
+
+	std::string ret;
+	if (!IsPositive())
+	{
+		ret += '-';
+	}
+	for (auto iter = dec.rbegin(); iter != dec.rend(); ++iter)
+	{
+		ret += NumToChar(*iter);
+	}
+
+	return ret;
+}
+
 std::string BigInt::ToRawData() const
 {
 	std::string ret;

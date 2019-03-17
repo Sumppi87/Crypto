@@ -62,6 +62,8 @@ public:
 
 	std::string ToHex() const;
 
+	std::string ToDec() const;
+
 	std::string ToRawData() const;
 
 	bool IsZero() const;
