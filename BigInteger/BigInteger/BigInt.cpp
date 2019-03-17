@@ -659,16 +659,16 @@ BigInt BigInt::operator*(const BigInt& other) const
 				if (val1 == 0 || val2 == 0)
 				{
 					continue;
-			}
+				}
 				MulUtil<Base, Mul> mul(val1 * val2);
 				AddResult(res.m_vals, mul, i + ii);
 #endif
+			}
 		}
-	}
 
 		res.CleanPreceedingZeroes();
 		return res;
-}
+	}
 }
 
 BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
@@ -684,16 +684,43 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 	copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
 	uint64_t shift = 0;
 
+	Base tmpBuf[MAX_SIZE] = {};
+	Base* tmpBuffer = tmpBuf;
+	auto Mul = [tmpBuffer](BigInt& multiplied, const BigInt& multiplier)
+	{
+		const auto neededSize = multiplied.CurrentSize() + multiplier.CurrentSize();
+
+		// When signs are the same, result is always positive, otherwise negative
+		multiplied.m_sign = multiplied.IsPositive() == multiplier.IsPositive() ? Sign::POS : Sign::NEG;
+		multiplied.Resize(neededSize);
+
+		for (size_t i = 0; i < multiplied.CurrentSize(); ++i)
+		{
+			for (size_t ii = 0; ii < multiplier.CurrentSize(); ++ii)
+			{
+				Base carry = 0;
+				const Base mul = _umul128(multiplied.m_vals[i], multiplier.m_vals[ii], &carry);
+				AddResult(&tmpBuffer[i + ii], mul);
+				if (carry)
+					AddResult(&tmpBuffer[i + ii + 1], carry);
+			}
+		}
+		multiplied.CopyFromSrc(tmpBuffer, neededSize, 0);
+		memset(tmpBuffer, 0, sizeof(Base) * neededSize);
+		multiplied.CleanPreceedingZeroes();
+	};
+
 	while (!e.IsZero())
 	{
 		if (e.IsOdd())
 		{
-			copy = copy * base;
+			Mul(copy, base);
 			Mod(copy, mod);
 		}
 
 		RightShift(e, exp, ++shift);
-		base = base * base;
+
+		Mul(base, base);
 		Mod(base, mod);
 	}
 	return copy;
@@ -1316,8 +1343,10 @@ void BigInt::SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend)
 	const size_t size = std::max(minuendRes.CurrentSize(), subtrahend.CurrentSize());
 	for (size_t i = size - 1;;)
 	{
-		const Base val = subtrahend.m_vals[i];
-		SubResult(&minuendRes.m_vals[i], val, 0);
+		if (_subborrow_u64(0, minuendRes.m_vals[i], subtrahend.m_vals[i], &minuendRes.m_vals[i]))
+		{
+			for (auto ii = i + 1; _subborrow_u64(1, minuendRes.m_vals[ii], 0, &minuendRes.m_vals[ii]); ++ii) {}
+		}
 		if (i != 0)
 			--i;
 		else
