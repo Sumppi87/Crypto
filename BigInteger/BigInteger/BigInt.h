@@ -88,6 +88,12 @@ public:
 
 	void SetZero();
 
+
+	inline size_t CurrentSize() const
+	{
+		return m_currentSize;
+	}
+
 private:
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const;
 
@@ -104,6 +110,7 @@ private:
 	static void SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend);
 	static void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
 	static void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);
+	//inline void ShiftRightByOne();
 
 	enum class Comparison
 	{
@@ -121,11 +128,6 @@ private:
 	Comparison CompareWithoutSign(const BigInt& other) const;
 
 	void Resize(const size_t size);
-
-	inline size_t CurrentSize() const
-	{
-		return m_currentSize;
-	}
 
 	// Returns a value starting from MSB (of the whole BigInt)
 	Base MostSignificant() const;

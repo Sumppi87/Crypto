@@ -101,50 +101,6 @@ namespace
 		}
 	}
 
-#ifdef TEST
-	inline unsigned __int64 mulhi(unsigned __int64 a, unsigned __int64 b)
-	{
-		uint64_t a_lo = (uint32_t)a;
-		uint64_t a_hi = a >> 32;
-		uint64_t b_lo = (uint32_t)b;
-		uint64_t b_hi = b >> 32;
-
-		uint64_t a_x_b_hi = a_hi * b_hi;
-		uint64_t a_x_b_mid = a_hi * b_lo;
-		uint64_t b_x_a_mid = b_hi * a_lo;
-		uint64_t a_x_b_lo = a_lo * b_lo;
-
-		uint64_t carry_bit = ((uint64_t)(uint32_t)a_x_b_mid +
-			(uint64_t)(uint32_t)b_x_a_mid +
-			(a_x_b_lo >> 32)) >> 32;
-
-		uint64_t multhi = a_x_b_hi +
-			(a_x_b_mid >> 32) + (b_x_a_mid >> 32) +
-			carry_bit;
-		return multhi;
-	}
-
-	unsigned __int64 _umul128(unsigned __int64 a, unsigned __int64 b, unsigned __int64* pHigh)
-	{
-		*pHigh = mulhi(a, b);
-		return a * b;
-	}
-
-	unsigned char _addcarry_u64(unsigned char c_in, unsigned __int64 a, unsigned __int64 b, unsigned __int64 *sum_out)
-	{
-		const uint32_t a_lo = uint32_t(a);
-		const uint32_t a_hi = uint32_t(a >> 32);
-		const uint32_t b_lo = uint32_t(b);
-		const uint32_t b_hi = uint32_t(b >> 32);
-		const uint64_t lo = a_lo + b_lo + (c_in > 0 ? 1 : 0);
-		const uint64_t hi = a_hi + b_hi;
-
-		*sum_out = ((hi << 32) | lo);
-
-		return (hi >> 32) > 0 ? unsigned char(1) : unsigned char(0);
-	}
-#endif
-
 #if defined (USE_64BIT_VALUES)
 	inline void AddResult(uint64_t* src, const uint64_t val)
 	{
@@ -175,6 +131,23 @@ namespace
 		p += shift;
 		return p;
 	}
+
+	inline void ShiftRightByOne(uint64_t* data, const size_t maxIndex)
+	{
+		uint64_t* lower = data;
+		uint64_t* upper = data + 1;
+		for (size_t i = 1; i <= maxIndex; ++i, ++lower, ++upper)
+		{
+			*lower = __shiftright128(*lower, *upper, 1);
+		}
+		data[maxIndex] = __ull_rshift(data[maxIndex], 1);
+	}
+
+	inline void ShiftRightByOne(uint64_t* data)
+	{
+		data[0] = __ull_rshift(data[0], 1);
+	}
+
 #else
 	template <typename Base, typename Mul>
 	union MulUtil
@@ -720,6 +693,13 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 
 		RightShift(e, exp, ++shift);
 
+		/*if (e.m_currentSize > 1)
+			ShiftRightByOne(e.m_vals, e.m_currentSize - 1);
+		else
+			ShiftRightByOne(e.m_vals);*/
+
+		e.CleanPreceedingZeroes();
+
 		Mul(base, base);
 		Mod(base, mod);
 	}
@@ -898,7 +878,26 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res.CleanPreceedingZeroes();
 	}
 }
+/*
+inline void BigInt::ShiftRightByOne()
+{
+	const auto maxIndex = CurrentSize();
+	if (maxIndex == 1)
+	{
+		m_vals[0] = __ull_rshift(m_vals[0], 1);
+	}
+	else
+	{
+		for (size_t i = 1; i < maxIndex; ++i)
+		{
+			m_vals[i - size_t(1)] = __shiftright128(m_vals[i - 1], m_vals[i], 1);
+		}
+		m_vals[maxIndex - 1] = __ull_rshift(m_vals[maxIndex - 1], 1);
+	}
 
+	CleanPreceedingZeroes();
+}
+*/
 bool BigInt::operator>(const BigInt& other) const
 {
 	const Comparison c = CompareWithSign(other);
