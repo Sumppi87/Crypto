@@ -778,7 +778,7 @@ void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
 	const uint64_t quot = (shift / (sizeof(Base) * 8));
 	const unsigned char rem = (shift % (sizeof(Base) * 8));
 
-	if ((quot + target.CurrentSize() + (rem > 0 ? 1 : 0)) >= MAX_SIZE)
+	if ((quot + target.CurrentSize() + (rem > 0 ? 1 : 0)) > MAX_SIZE)
 	{
 		throw std::invalid_argument("Overflow detected");
 	}
@@ -1463,7 +1463,7 @@ BigInt::Comparison BigInt::CompareWithoutSign(const BigInt& other) const
 void BigInt::Resize(const size_t size)
 {
 	static size_t maxSize = 0;
-	if (size >= MAX_SIZE)
+	if (size > MAX_SIZE)
 	{
 		throw std::invalid_argument("Overflow detected");
 	}

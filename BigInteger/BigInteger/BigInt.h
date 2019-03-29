@@ -88,6 +88,11 @@ public:
 
 	void SetZero();
 
+	inline size_t CurrentSize() const
+	{
+		return m_currentSize;
+	}
+
 private:
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const;
 
@@ -121,11 +126,6 @@ private:
 	Comparison CompareWithoutSign(const BigInt& other) const;
 
 	void Resize(const size_t size);
-
-	inline size_t CurrentSize() const
-	{
-		return m_currentSize;
-	}
 
 	// Returns a value starting from MSB (of the whole BigInt)
 	Base MostSignificant() const;
