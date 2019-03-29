@@ -3,6 +3,25 @@
 #include "BigInt.h"
 #include <iostream>
 
+namespace
+{
+	// !\brief Encrypted data contains the actual byte count in the block
+	// !\details Byte count is written before actual data.
+	const uint8_t BLOCK_SIZE_BYTES = 2;
+
+	const uint64_t BlockSize(const Crypto::KeySize keySize)
+	{
+		switch (keySize)
+		{
+		case Crypto::KeySize::KS_1024:
+			return 128;
+		default:
+			return 0;
+			break;
+		}
+	}
+}
+
 struct Crypto::PublicKey
 {
 	BigInt e;
@@ -23,13 +42,12 @@ Crypto::AsymmetricKeys::AsymmetricKeys()
 	: privKey(nullptr)
 	, pubKey(nullptr) {}
 
-bool Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* pKeys)
+Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* pKeys)
 {
-	// TODO: Enumerate return value
-
 	if (pKeys == nullptr)
-		return false;
+		return CryptoRet::INVALID_PARAMETER;
 
+	CryptoRet ret = CryptoRet::OK;
 	try
 	{
 		pKeys->privKey = new PrivateKey();
@@ -61,51 +79,80 @@ bool Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* pKeys)
 		pKeys->pubKey->e = e;
 		pKeys->pubKey->keySize = s;
 
-		return true;
+		ret = CryptoRet::OK;
 	}
 	catch (const std::invalid_argument& e)
 	{
+		ret = CryptoRet::INTERNAL_ERROR;
 		// TODO: log the error
 	}
 	catch (const std::logic_error& e)
 	{
+		ret = CryptoRet::INTERNAL_ERROR;
 		// TODO: log the error
 	}
 	catch (const std::bad_alloc& e)
 	{
+		ret = CryptoRet::INSUFFICIENT_RESOURCES;
 		// TODO: log the error
 	}
 	catch (...)
 	{
+		ret = CryptoRet::INTERNAL_ERROR;
 		// TODO: log the error
 	}
 
-	delete pKeys->privKey;
-	pKeys->privKey = nullptr;
-	delete pKeys->pubKey;
-	pKeys->pubKey = nullptr;
-	return false;
+	if (ret != CryptoRet::OK)
+	{
+		delete pKeys->privKey;
+		pKeys->privKey = nullptr;
+		delete pKeys->pubKey;
+		pKeys->pubKey = nullptr;
+	}
+	return ret;
 }
 
-bool Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
+Crypto::CryptoRet Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
 {
 	if (keys == nullptr)
-		return false;
+		return CryptoRet::INVALID_PARAMETER;
 
 	delete keys->privKey;
 	keys->privKey = nullptr;
 	delete keys->pubKey;
 	keys->pubKey = nullptr;
 	
-	return true;
+	return CryptoRet::OK;
 }
 
-bool Crypto::Encrypt(const PublicKey* key, const Data input, const Data output, uint64_t* pEncryptedBytes)
+Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const Data input, const Data output, uint64_t* pEncryptedBytes)
 {
-	return false;
+	if (key == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (input.pData == nullptr || input.size == 0)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (output.pData == nullptr || output.size == 0)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (pEncryptedBytes == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	const bool inPlace = input.pData == output.pData;
+
+	// BlockSize : ((KeySize / 8) - 2)
+	// BlockCount : ceil(input.size / BlockSize)
+	// NeededBufferSize : BlockCount * (KeySize / 8)
+
+	const auto blockSize = BlockSize(key->keySize) - 2;
+	const auto blockCount = (input.size / blockSize) + ((input.size % blockSize) > 0 ? 1 : 0);
+	const auto neededBuffer = blockCount * BlockSize(key->keySize);
+	if (neededBuffer > output.size)
+		return CryptoRet::INSUFFICIENT_BUFFER;
+
+
+	return Crypto::CryptoRet::INTERNAL_ERROR;
 }
 
-bool Crypto::Decrypt(const PrivateKey* key, const Data input, const Data output, uint64_t* pDecryptedBytes)
+Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const Data input, const Data output, uint64_t* pDecryptedBytes)
 {
-	return false;
+	return Crypto::CryptoRet::INTERNAL_ERROR;
 }

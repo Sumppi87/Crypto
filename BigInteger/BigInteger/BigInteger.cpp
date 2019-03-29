@@ -280,7 +280,7 @@ void TestGCD()
 
 void Test_RSA()
 {
-	const char* rawData = "Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing Testing1";
+	const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testing6";
 	BigInt data = BigInt::FromRawData(rawData, strlen(rawData));
 	const std::string fromRawData = data.ToRawData();
 
