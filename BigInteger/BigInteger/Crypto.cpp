@@ -2,45 +2,12 @@
 #include "Crypto.h"
 #include "BigInt.h"
 #include <iostream>
-
-namespace
-{
-	// !\brief Encrypted data contains the actual byte count in the block
-	// !\details Byte count is written before actual data.
-	const uint8_t BLOCK_SIZE_BYTES = 2;
-
-	const uint64_t BlockSize(const Crypto::KeySize keySize)
-	{
-		switch (keySize)
-		{
-		case Crypto::KeySize::KS_1024:
-			return 128;
-		default:
-			return 0;
-			break;
-		}
-	}
-}
-
-struct Crypto::PublicKey
-{
-	BigInt e;
-	BigInt n;
-	
-	Crypto::KeySize keySize;
-};
-
-struct Crypto::PrivateKey
-{
-	BigInt d;
-	BigInt n;
-
-	Crypto::KeySize keySize;
-};
+#include "CryptoUtils.h"
 
 Crypto::AsymmetricKeys::AsymmetricKeys()
 	: privKey(nullptr)
-	, pubKey(nullptr) {}
+	, pubKey(nullptr)
+	, keySize(KeySize::KS_1024) {}
 
 Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* pKeys)
 {
@@ -52,6 +19,7 @@ Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* 
 	{
 		pKeys->privKey = new PrivateKey();
 		pKeys->pubKey = new PublicKey();
+		pKeys->keySize = s;
 
 		// TODO: Generate random primes
 		BigInt p("12131072439211271897323671531612440428472427633701410925634549312301964373042085619324197365322416866541017057361365214171711713797974299334871062829803541");
@@ -125,7 +93,7 @@ Crypto::CryptoRet Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
 	return CryptoRet::OK;
 }
 
-Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const Data input, const Data output, uint64_t* pEncryptedBytes)
+Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes)
 {
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
@@ -142,17 +110,76 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const Data input, const 
 	// BlockCount : ceil(input.size / BlockSize)
 	// NeededBufferSize : BlockCount * (KeySize / 8)
 
-	const auto blockSize = BlockSize(key->keySize) - 2;
-	const auto blockCount = (input.size / blockSize) + ((input.size % blockSize) > 0 ? 1 : 0);
-	const auto neededBuffer = blockCount * BlockSize(key->keySize);
+	uint16_t blockSizePlain = 0;
+	uint16_t blockSizeEncrypted = 0;
+	CryptoUtils::BlockSize(key->keySize, &blockSizePlain, &blockSizeEncrypted);
+	const auto blockCount = (input.size / blockSizePlain) + ((input.size % blockSizePlain) > 0 ? 1 : 0);
+	const auto neededBuffer = blockCount * blockSizeEncrypted;
 	if (neededBuffer > output.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
+	if (inPlace)
+	{
+		// TODO
+		return Crypto::CryptoRet::INTERNAL_ERROR;
+	}
+	else
+	{
+		auto remainingData = input.size;
+		for (auto i = 0; i < blockCount; ++i)
+		{
+			const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
+			CryptoUtils::EncryptBlock(*key,
+				DataIn(input.pData + (blockSizePlain * i), size),
+				DataOut(output.pData + (blockSizeEncrypted * i), blockSizeEncrypted),
+				pEncryptedBytes);
 
-	return Crypto::CryptoRet::INTERNAL_ERROR;
+			remainingData -= blockSizePlain;
+		}
+	}
+
+	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const Data input, const Data output, uint64_t* pDecryptedBytes)
+Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes)
 {
-	return Crypto::CryptoRet::INTERNAL_ERROR;
+	if (key == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (input.pData == nullptr || input.size == 0)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (output.pData == nullptr || output.size == 0)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (pDecryptedBytes == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	const bool inPlace = input.pData == output.pData;
+
+	// BlockSize : ((KeySize / 8) - 2)
+	// BlockCount : ceil(input.size / BlockSize)
+	// NeededBufferSize : BlockCount * (KeySize / 8)
+
+	uint16_t blockSizePlain = 0;
+	uint16_t blockSizeEncrypted = 0;
+	CryptoUtils::BlockSize(key->keySize, &blockSizePlain, &blockSizeEncrypted);
+	const auto blockCount = (input.size / blockSizeEncrypted) + ((input.size % blockSizeEncrypted) > 0 ? 1 : 0);
+	const auto neededBuffer = blockCount * blockSizePlain;
+	if (neededBuffer > output.size)
+		return CryptoRet::INSUFFICIENT_BUFFER;
+
+	if (inPlace)
+	{
+		// TODO
+		return Crypto::CryptoRet::INTERNAL_ERROR;
+	}
+	else
+	{
+		for (auto i = 0; i < blockCount; ++i)
+		{
+			CryptoUtils::DecryptBlock(*key,
+				DataIn(input.pData + (blockSizeEncrypted * i), blockSizeEncrypted),
+				DataOut(output.pData + (blockSizePlain * i), blockSizePlain),
+				pDecryptedBytes);
+		}
+	}
+	return Crypto::CryptoRet::OK;
 }

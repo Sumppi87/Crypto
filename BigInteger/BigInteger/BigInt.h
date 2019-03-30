@@ -4,6 +4,8 @@
 #define USE_64BIT_IF_POSSIBLE
 #define MAX_SIZE 64
 
+class CryptoUtils;
+
 class BigInt
 {
 public:
@@ -151,4 +153,6 @@ private:
 	};
 
 	Sign m_sign;
+
+	friend class CryptoUtils;
 };

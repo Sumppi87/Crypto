@@ -18,19 +18,34 @@ public:
 
 		PublicKey* pubKey;
 		PrivateKey* privKey;
+		KeySize keySize;
 	};
 
-	struct Data
+	struct DataIn
 	{
-		Data()
+		DataIn()
 			: pData(nullptr)
 			, size(0) {}
 		
-		Data(const char* data, const uint64_t s)
+		DataIn(const char* data, const uint64_t s)
 			: pData(data)
 			, size(s) {}
 
 		const char* pData;
+		uint64_t size;
+	};
+
+	struct DataOut
+	{
+		DataOut()
+			: pData(nullptr)
+			, size(0) {}
+
+		DataOut(char* data, const uint64_t s)
+			: pData(data)
+			, size(s) {}
+
+		char* pData;
 		uint64_t size;
 	};
 
@@ -70,7 +85,7 @@ public:
 	//           BlockSize : ((KeySize / 8) - 2)
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * (KeySize / 8)
-	static CryptoRet Encrypt(const PublicKey* key, const Data input, const Data output, uint64_t* pEncryptedBytes);
+	static CryptoRet Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes);
 
 	// !\Brief Decrypts data with the given private key
 	// !\param[in] key Decryption key
@@ -86,6 +101,6 @@ public:
 	//           BlockSize : (KeySize / 8)
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * ((KeySize - 2) / 8)
-	static CryptoRet Decrypt(const PrivateKey* key, const Data input, const Data output, uint64_t* pDecryptedBytes);
+	static CryptoRet Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
 };
 
