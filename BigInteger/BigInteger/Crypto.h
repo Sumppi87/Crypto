@@ -26,7 +26,7 @@ public:
 		DataIn()
 			: pData(nullptr)
 			, size(0) {}
-		
+
 		DataIn(const char* data, const uint64_t s)
 			: pData(data)
 			, size(s) {}

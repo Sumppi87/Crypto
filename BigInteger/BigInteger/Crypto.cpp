@@ -89,7 +89,7 @@ Crypto::CryptoRet Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
 	keys->privKey = nullptr;
 	delete keys->pubKey;
 	keys->pubKey = nullptr;
-	
+
 	return CryptoRet::OK;
 }
 
@@ -129,9 +129,11 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 		for (auto i = 0; i < blockCount; ++i)
 		{
 			const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
+			auto src = input.pData + (blockSizePlain * i);
+			auto dst = output.pData + (blockSizeEncrypted * i);
 			CryptoUtils::EncryptBlock(*key,
-				DataIn(input.pData + (blockSizePlain * i), size),
-				DataOut(output.pData + (blockSizeEncrypted * i), blockSizeEncrypted),
+				DataIn(src, size),
+				DataOut(dst, blockSizeEncrypted),
 				pEncryptedBytes);
 
 			remainingData -= blockSizePlain;
@@ -175,9 +177,11 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 	{
 		for (auto i = 0; i < blockCount; ++i)
 		{
+			auto src = input.pData + (blockSizeEncrypted * i);
+			auto dst = output.pData + (blockSizePlain * i);
 			CryptoUtils::DecryptBlock(*key,
-				DataIn(input.pData + (blockSizeEncrypted * i), blockSizeEncrypted),
-				DataOut(output.pData + (blockSizePlain * i), blockSizePlain),
+				DataIn(src, blockSizeEncrypted),
+				DataOut(dst, blockSizePlain),
 				pDecryptedBytes);
 		}
 	}

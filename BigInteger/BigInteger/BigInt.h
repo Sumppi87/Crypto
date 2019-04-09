@@ -82,6 +82,8 @@ public:
 
 	void ExtendedEuclididan(const BigInt& b, BigInt& gcd, BigInt& x, BigInt& y) const;
 
+	bool IsPrimeNumber() const;
+
 	void SetBit(const uint64_t bitNo);
 
 	uint64_t GetBitWidth() const;
@@ -131,6 +133,9 @@ private:
 
 	// Returns a value starting from MSB (of the whole BigInt)
 	Base MostSignificant() const;
+
+	// Gets the bitnumber of least significant bit
+	size_t GetLSB() const;
 
 	void CopyFromSrc(const void* src,
 		const size_t count,

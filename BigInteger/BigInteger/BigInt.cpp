@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "BigInt.h"
+#include "CryptoUtils.h"
 #include <type_traits>
 #include <string>
 #include <cstdlib>
@@ -11,6 +12,10 @@
 
 namespace
 {
+	// How many iterations to perform when testing whether a value is a prime or not
+	// With 60, a chance for a false positive is 1 / (2^128)
+	const uint8_t PRIME_TEST_ITERATIONS = 60;
+
 	char NumToChar(const uint8_t num)
 	{
 		switch (num)
@@ -215,23 +220,8 @@ BigInt BigInt::FromRawData(const char* data, const size_t length)
 {
 	BigInt res;
 
-	const auto chunks = length / sizeof(Base);
-	const auto leftOver = length % sizeof(Base);
-	res.Resize(chunks + (leftOver > 0 ? 1 : 0));
-
-	size_t readChars = 0;
-	for (size_t i = 0; i < res.CurrentSize(); ++i)
-	{
-		for (size_t charPos = 0
-			; readChars < length && charPos < sizeof(Base)
-			; ++charPos, ++readChars)
-		{
-			const auto shift = charPos * 8;
-			const char c = data[readChars];
-			const Base shiftedC = (Base(c) << shift);
-			res.m_vals[i] |= shiftedC;
-		}
-	}
+	res.Resize((length / sizeof(Base)) + (length % sizeof(Base) > 0 ? 1 : 0));
+	memcpy(&res.m_vals, data, length);
 
 	return res;
 }
@@ -1154,6 +1144,73 @@ void BigInt::ExtendedEuclididan(const BigInt& b, BigInt& gcd, BigInt& x, BigInt&
 	x = old_s;
 	y = old_t;
 }
+/*
+Input #1: n > 3, an odd integer to be tested for primality
+Input #2: k, the number of rounds of testing to perform
+Output: "composite" if n is found to be composite, "probably prime" otherwise
+
+write n as 2^r*d + 1 with d odd (by factoring out powers of 2 from n - 1)
+WitnessLoop: repeat k times:
+   pick a random integer a in the range [2, n - 2]
+   x = a^d mod n
+   if x == 1 or x == n - 1 then
+	  continue WitnessLoop
+   repeat r - 1 times:
+	  x = x^2 mod n
+	  if x == n - 1 then
+		 continue WitnessLoop
+   return "composite"
+return "probably prime"
+*/
+bool BigInt::IsPrimeNumber() const
+{
+	if (IsZero() || !IsOdd())
+		return false;
+
+	auto rand = CryptoUtils::GetRand();
+
+	const BigInt& n = *this;
+	const BigInt n_1 = *this - 1;
+	const size_t r = n_1.GetLSB();
+	const BigInt d = n_1 / BigInt(2).Pow(r);
+
+	auto InnerLoop = [r, &n_1, &n](BigInt& x)
+	{
+		// Repeat r - 1 times
+		for (auto ii = 1; ii < r; ++ii)
+		{
+			x = x.PowMod(2, n);
+			if (x == n_1)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+
+	for (auto i = 0; i < PRIME_TEST_ITERATIONS; ++i)
+	{
+		BigInt a;
+
+		// Pick a size for 'a' between one and CurrentSize of this
+		auto size = (rand->Random64() % CurrentSize()) + 1;
+		a.Resize(size);
+		rand->RandomData(a.m_vals, a.CurrentSize());
+		a = (a + 2) % n_1;
+
+		BigInt x = a.PowMod(d, *this);
+		if (x.IsOne() || x == n_1)
+		{
+			continue;
+		}
+
+		if (InnerLoop(x))
+			continue;
+
+		return false;
+	}
+	return true;
+}
 
 void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) const
 {
@@ -1335,7 +1392,6 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 	return copy;
 }
 
-
 BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 {
 	BigInt copy(*this);
@@ -1499,6 +1555,21 @@ BigInt::Base BigInt::MostSignificant() const
 		{
 			const auto shift = int((sizeof(Base) * 8) - 1 - index);
 			ret = __shiftleft128(m_vals[m_currentSize - 2], m_vals[m_currentSize - 1], shift);
+		}
+	}
+	return ret;
+}
+
+size_t BigInt::GetLSB() const
+{
+	size_t ret = 0;
+	for (auto i = 0; i < CurrentSize(); ++i)
+	{
+		unsigned long index = 0;
+		if (_BitScanForward64(&index, m_vals[i]))
+		{
+			ret = index + (sizeof(Base) * 8 * i);
+			break;
 		}
 	}
 	return ret;
