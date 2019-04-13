@@ -21,18 +21,21 @@ Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* 
 		pKeys->pubKey = new PublicKey();
 		pKeys->keySize = s;
 
-		// TODO: Generate random primes
-		BigInt p("12131072439211271897323671531612440428472427633701410925634549312301964373042085619324197365322416866541017057361365214171711713797974299334871062829803541");
-		BigInt q("12027524255478748885956220793734512128733387803682075433653899983955179850988797899869146900809131611153346817050832096022160146366346391812470987105415233");
+		uint32_t temp = 0;
+		BigInt p = CryptoUtils::GenerateRandomPrime(s, temp);
+		BigInt q = CryptoUtils::GenerateRandomPrime(s, temp);
 
 		BigInt n = p * q;
 		BigInt t = (p - 1) * (q - 1);
 
 		BigInt e(65537);
 		uint64_t iters = 0;
-		while (n.GreatestCommonDivisor(e, iters) != 1)
+		while (t.GreatestCommonDivisor(e, iters) != 1)
 		{
 			e = e + 1;
+
+			while (!e.IsPrimeNumber())
+				e = e + 1;
 			std::cout << "Booboo" << std::endl;
 		}
 
@@ -118,10 +121,12 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 	if (neededBuffer > output.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
+	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
+
 	if (inPlace)
 	{
 		// TODO
-		return Crypto::CryptoRet::INTERNAL_ERROR;
+		ret = Crypto::CryptoRet::INTERNAL_ERROR;
 	}
 	else
 	{
@@ -131,10 +136,16 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 			const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
 			auto src = input.pData + (blockSizePlain * i);
 			auto dst = output.pData + (blockSizeEncrypted * i);
-			CryptoUtils::EncryptBlock(*key,
+			ret = CryptoUtils::EncryptBlock(*key,
 				DataIn(src, size),
 				DataOut(dst, blockSizeEncrypted),
 				pEncryptedBytes);
+
+			if (ret != Crypto::CryptoRet::OK)
+			{
+				*pEncryptedBytes = 0;
+				break;
+			}
 
 			remainingData -= blockSizePlain;
 		}
@@ -168,10 +179,11 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 	if (neededBuffer > output.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
+	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
 	if (inPlace)
 	{
 		// TODO
-		return Crypto::CryptoRet::INTERNAL_ERROR;
+		ret = Crypto::CryptoRet::INTERNAL_ERROR;
 	}
 	else
 	{
@@ -179,11 +191,17 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 		{
 			auto src = input.pData + (blockSizeEncrypted * i);
 			auto dst = output.pData + (blockSizePlain * i);
-			CryptoUtils::DecryptBlock(*key,
+			ret = CryptoUtils::DecryptBlock(*key,
 				DataIn(src, blockSizeEncrypted),
 				DataOut(dst, blockSizePlain),
 				pDecryptedBytes);
+
+			if (ret != Crypto::CryptoRet::OK)
+			{
+				*pDecryptedBytes = 0;
+				break;
+			}
 		}
 	}
-	return Crypto::CryptoRet::OK;
+	return ret;
 }

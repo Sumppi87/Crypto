@@ -1166,11 +1166,14 @@ bool BigInt::IsPrimeNumber() const
 {
 	if (IsZero() || !IsOdd())
 		return false;
+	else if (*this == 3)
+		return true;
 
 	auto rand = CryptoUtils::GetRand();
 
 	const BigInt& n = *this;
 	const BigInt n_1 = *this - 1;
+	const BigInt n_3 = *this - 3;
 	const size_t r = n_1.GetLSB();
 	const BigInt d = n_1 / BigInt(2).Pow(r);
 
@@ -1196,7 +1199,7 @@ bool BigInt::IsPrimeNumber() const
 		auto size = (rand->Random64() % CurrentSize()) + 1;
 		a.Resize(size);
 		rand->RandomData(a.m_vals, a.CurrentSize());
-		a = (a + 2) % n_1;
+		a = (a % n_3) + 2;
 
 		BigInt x = a.PowMod(d, *this);
 		if (x.IsOne() || x == n_1)

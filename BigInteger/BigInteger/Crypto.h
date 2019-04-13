@@ -9,7 +9,13 @@ public:
 
 	enum class KeySize
 	{
+		KS_64 = 64,
+		KS_128 = 128,
+		KS_256 = 256,
+		KS_512 = 512,
 		KS_1024 = 1024,
+		KS_2048 = 2048,
+		KS_3072 = 3072
 	};
 
 	struct AsymmetricKeys

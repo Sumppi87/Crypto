@@ -15,6 +15,12 @@ namespace
 		uint16_t block = 0;
 		switch (keySize)
 		{
+		case Crypto::KeySize::KS_64:
+			block = 8;
+			break;
+		case Crypto::KeySize::KS_128:
+			block = 16;
+			break;
 		case Crypto::KeySize::KS_256:
 			block = 32;
 			break;
@@ -34,6 +40,12 @@ namespace
 			break;
 		}
 		return block;
+	}
+
+	bool operator>(const BigInt& num, const Crypto::KeySize keysize)
+	{
+		const auto keyBytes = KeyBytes(keysize);
+		return num.GetBitWidth() > (keyBytes * 8);
 	}
 }
 
@@ -172,19 +184,32 @@ void CryptoUtils::BlockSize(const Crypto::KeySize keySize, uint16_t* pDecrypted,
 
 BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t& iters)
 {
-	const uint16_t blocks = ((KeyBytes(keySize) / 2) / sizeof(BigInt::Base));
+	const uint16_t keyBytes = KeyBytes(keySize) / 2;
+	const uint16_t blocks = keyBytes > sizeof(BigInt::Base) ? keyBytes / sizeof(BigInt::Base) : 1;
+
 	BigInt randPrime;
 	randPrime.Resize(blocks);
 
-	// Generate random data
-	RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
-	if (!randPrime.IsOdd())
-		randPrime = randPrime + 1;
+	if (keySize == Crypto::KeySize::KS_64)
+	{
+		// Generate random data
+		RAND.RandomData((char*)randPrime.m_vals, keyBytes);
+		if (!randPrime.IsOdd())
+			randPrime = randPrime + 1;
 
-	// Make sure the highest bit is set
-	randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << 63;
+		// Make sure the highest bit is set
+		randPrime.m_vals[0] |= 1ULL << 31;
+	}
+	else
+	{
+		// Generate random data
+		RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
+		if (!randPrime.IsOdd())
+			randPrime = randPrime + 1;
 
-	//BigInt randPrime("9614825912946242064294380166337191124362675424694101952984072731932506170011274775138915801173824683676800917137940402545515866273677999615238028899943021");
+		// Make sure the highest bit is set
+		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << 63;
+	}
 
 	const BigInt two(2);
 	iters = 1;
@@ -196,6 +221,13 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 		++iters;
 	}
 
-	std::cout << "Prime number generated with :" << iters << " iterations" << std::endl;
+	if (randPrime > keySize)
+	{
+		_ASSERT(0);
+		std::cerr << "Generated prime number is larger than expected, retry" << std::endl;
+		return GenerateRandomPrime(keySize, iters);
+	}
+
+	//std::cout << "Prime number generated with :" << iters << " iterations" << std::endl;
 	return randPrime;
 }
