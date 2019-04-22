@@ -4,6 +4,12 @@
 #include <iostream>
 #include "CryptoUtils.h"
 
+namespace
+{
+	//! \brief Defines a default public exponent (e in public key)
+	const BigInt DEFAULT_E = BigInt(65537);
+}
+
 Crypto::AsymmetricKeys::AsymmetricKeys()
 	: privKey(nullptr)
 	, pubKey(nullptr)
@@ -28,15 +34,14 @@ Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* 
 		BigInt n = p * q;
 		BigInt t = (p - 1) * (q - 1);
 
-		BigInt e(65537);
+		BigInt e = DEFAULT_E;
+
 		uint64_t iters = 0;
 		while (t.GreatestCommonDivisor(e, iters) != 1)
 		{
 			e = e + 1;
-
 			while (!e.IsPrimeNumber())
 				e = e + 1;
-			std::cout << "Booboo" << std::endl;
 		}
 
 		BigInt d = e.ModuloMultiplicativeInverse(t);
@@ -94,6 +99,47 @@ Crypto::CryptoRet Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
 	keys->pubKey = nullptr;
 
 	return CryptoRet::OK;
+}
+
+Crypto::CryptoRet Crypto::ExportAsymmetricKeys(AsymmetricKeys* keys,
+	const DataOut priv,
+	uint16_t* pPrivBytesWritten,
+	const DataOut pub,
+	uint16_t* pPubBytesWritten)
+{
+	if (keys == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (pPrivBytesWritten == nullptr || pPubBytesWritten == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (priv.pData == nullptr || pub.pData == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	CryptoRet ret = CryptoUtils::WriteKeyToBuffer(keys->pubKey, pub, pPubBytesWritten);
+	if (ret == CryptoRet::OK)
+	{
+		ret = CryptoUtils::WriteKeyToBuffer(keys->privKey, priv, pPrivBytesWritten);
+		if (ret != CryptoRet::OK)
+		{
+			// Clear already written public key
+			memset(pub.pData, 0, pub.size);
+		}
+	}
+	return ret;
+}
+
+Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* keys, const DataOut priv, const DataOut pub)
+{
+	return CryptoRet();
+}
+
+void Crypto::NeededBufferSizeForExport(const KeySize keySize,
+	uint16_t* pPrivateKeyBytes,
+	uint16_t* pPublicKeyBytes)
+{
+	if (pPrivateKeyBytes)
+		*pPrivateKeyBytes = CryptoUtils::NeededBufferSizePrivate(keySize);
+	if (pPublicKeyBytes)
+		*pPublicKeyBytes = CryptoUtils::NeededBufferSizePublic(keySize);
 }
 
 Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes)

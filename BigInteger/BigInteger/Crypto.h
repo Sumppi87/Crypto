@@ -64,6 +64,9 @@ public:
 		INTERNAL_ERROR = -4
 	};
 
+#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 55)
+#define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) + 57 + 3)
+
 public:
 	// !\Brief Generates a random public/private keypair
 	// !\param[in] size Keysize
@@ -77,6 +80,38 @@ public:
 	// !\return CryptoRet::OK if keys were successfully deallocated
 	static CryptoRet DeleteAsymmetricKeys(AsymmetricKeys* keys);
 
+	// !\Brief Stores asymmetric keys to output buffer
+	// !\param[in] keys Asymmetric key to store
+	// !\param[in] priv Buffer to store the private key,
+	// Needed buffer size can be calculated with a formula: (keysize / 8) * 2 + 57
+	// !\param[out] pPrivBytesWritten Private key bytes written to the buffer
+	// !\param[in] pub Buffer to store the public key
+	// Needed buffer size can be calculated with a formula: (keysize / 8) + 5 + 57
+	// !\param[out] pPubBytesWritten Publis key bytes written to the buffer
+	// !\return CryptoRet::OK if keys were successfully stored
+	// !\note AsymmetricKeys are not released, keys must be destroyed with DeleteAsymmetricKeys
+	static CryptoRet ExportAsymmetricKeys(AsymmetricKeys* keys,
+		const DataOut priv,
+		uint16_t* pPrivBytesWritten,
+		const DataOut pub,
+		uint16_t* pPubBytesWritten);
+
+	// !\Brief Calculates the needed buffer size key exporting keys
+	// !\param[in] keys Asymmetric key to calculate
+	// !\param[out] pPrivateKeyBytes Needed buffer size for private key, optional param
+	// !\param[out] pPublicKeyBytes Needed buffer size for public key, optional param
+	static void NeededBufferSizeForExport(const KeySize keySize,
+		uint16_t* pPrivateKeyBytes,
+		uint16_t* pPublicKeyBytes);
+
+	// !\Brief Imports asymmetric keys from buffers
+	// !\param[out] Asymmetric key from buffers
+	// !\param[in] priv Buffer where the private key is stored
+	// !\param[in] priv Buffer where the public key is stored
+	// !\return CryptoRet::OK if keys were successfully stored
+	// !\note Imported keys must be destroyed with DeleteAsymmetricKeys
+	static CryptoRet ImportAsymmetricKeys(AsymmetricKeys* keys, const DataOut priv, const DataOut pub);
+
 	// !\Brief Encrypts data with given public key
 	// !\param[in] key Encryption key
 	// !\param[in] input Data to encrypt
@@ -88,7 +123,7 @@ public:
 	//        When in-place encryption is not used, buffers of input and output shall not overlap
 	// !\details Output buffer must be sufficiently large for encrypted data.
 	//           Needed buffer size can be calculated with keysize and data size of the input
-	//           BlockSize : ((KeySize / 8) - 2)
+	//           BlockSize : ((KeySize / 8) - 3)
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * (KeySize / 8)
 	static CryptoRet Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes);
@@ -106,7 +141,7 @@ public:
 	//           Needed buffer size can be calculated with keysize and data size of the input
 	//           BlockSize : (KeySize / 8)
 	//           BlockCount : ceil(input.size / BlockSize)
-	//           NeededBufferSize : BlockCount * ((KeySize - 2) / 8)
+	//           NeededBufferSize : BlockCount * ((KeySize - 3) / 8)
 	static CryptoRet Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
 };
 

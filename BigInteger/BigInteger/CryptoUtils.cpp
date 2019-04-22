@@ -6,9 +6,22 @@
 
 namespace
 {
+	const char NEW_LINE = '\n';
+	const char* BEGIN_PRIVATE_KEY = "=== BEGIN PRIVATE KEY ===";
+	const char* END_PRIVATE_KEY = "=== END PRIVATE KEY ===";
+
+	const char* BEGIN_PUBLIC_KEY = "=== BEGIN PUBLIC KEY ===";
+	const char* END_PUBLIC_KEY = "===  END PUBLIC KEY  ===";
+
+	const uint8_t HEX_PREFIX_SIZE = uint8_t(strlen("0x"));
+
 	// !\brief Encrypted data contains the actual byte count in the block
 	// !\details Byte count is written before actual data.
 	const uint8_t BLOCK_SIZE_BYTES = 2;
+
+	// !\brief 
+	// !\details Byte count is written before actual data.
+	const uint8_t GUARD_BYTES = 1;
 
 	uint16_t KeyBytes(const Crypto::KeySize keySize)
 	{
@@ -46,6 +59,48 @@ namespace
 	{
 		const auto keyBytes = KeyBytes(keysize);
 		return num.GetBitWidth() > (keyBytes * 8);
+	}
+
+	bool operator!=(const BigInt& num, const Crypto::KeySize keysize)
+	{
+		const auto keyBytes = KeyBytes(keysize);
+		return num.GetBitWidth() != (keyBytes * 8);
+	}
+
+	void WriteNewline(char** buffer)
+	{
+		memcpy(*buffer, &NEW_LINE, sizeof(NEW_LINE));
+		*buffer += sizeof(NEW_LINE);
+	}
+
+	void WriteNumToBuffer(char** buffer, const BigInt& num)
+	{
+		const auto d = num.ToHex();
+		memcpy(*buffer, d.data(), d.size());
+		*buffer += d.size();
+		WriteNewline(buffer);
+	}
+
+	void WriteHeader(char** buffer, const char* header, const bool addNewline)
+	{
+		memcpy(*buffer, header, strlen(header));
+		*buffer += strlen(header);
+		if (addNewline)
+		{
+			WriteNewline(buffer);
+		}
+	}
+
+	void WriteToBuffer(const char* headerBegin,
+		const char* headerEnd,
+		const BigInt& exponent,
+		const BigInt& modulo,
+		char** buffer)
+	{
+		WriteHeader(buffer, headerBegin, true);
+		WriteNumToBuffer(buffer, exponent);
+		WriteNumToBuffer(buffer, modulo);
+		WriteHeader(buffer, headerEnd, false);
 	}
 }
 
@@ -86,6 +141,53 @@ CryptoUtils::RandomGenerator* CryptoUtils::GetRand()
 	return &RAND;
 }
 
+Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PublicKey* key,
+	const Crypto::DataOut out,
+	uint16_t* pPubBytesWritten)
+{
+	Crypto::CryptoRet ret = ValidateKey(key);
+	if (ret != Crypto::CryptoRet::OK)
+		return ret;
+	else if (pPubBytesWritten == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (out.pData == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+
+	const uint16_t neededBuffer = NeededBufferSizePublic(key->keySize);
+	if (neededBuffer > out.size)
+		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
+
+	auto pData = out.pData;
+	WriteToBuffer(BEGIN_PUBLIC_KEY, END_PUBLIC_KEY, key->n, key->e, &pData);
+	*pPubBytesWritten = uint16_t(pData - out.pData);
+
+	return Crypto::CryptoRet::OK;
+}
+
+Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PrivateKey* key,
+	const Crypto::DataOut out,
+	uint16_t* pPrivBytesWritten)
+{
+	Crypto::CryptoRet ret = ValidateKey(key);
+	if (ret != Crypto::CryptoRet::OK)
+		return ret;
+	else if (pPrivBytesWritten == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (out.pData == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+
+	const uint16_t neededBuffer = NeededBufferSizePrivate(key->keySize);
+	if (neededBuffer > out.size)
+		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
+
+	auto pData = out.pData;
+
+	WriteToBuffer(BEGIN_PRIVATE_KEY, END_PRIVATE_KEY, key->n, key->d, &pData);
+	*pPrivBytesWritten = uint16_t(pData - out.pData);
+
+	return Crypto::CryptoRet::OK;
+}
+
 Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	const Crypto::DataIn input,
 	const Crypto::DataOut out,
@@ -106,20 +208,21 @@ Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	char* dst = (reinterpret_cast<char*>(data.m_vals) + BLOCK_SIZE_BYTES);
 	memcpy(dst, input.pData, input.size);
 
-#ifdef _DEBUG
-	std::cout << "Encrypting Block: " << std::string(input.pData, input.size) << std::endl;
-#endif
-
 	if (input.size < decryptedBlockSize)
 	{
 		// TODO: Padding causes some problems -> investigate
 		// Padd with some random data
-		//RAND.RandomData(dst + input.size + BLOCK_SIZE_BYTES, decryptedBlockSize - input.size);
+		RAND.RandomData(dst + input.size, decryptedBlockSize - input.size);
 	}
+
+#ifdef _DEBUG
+	std::cout << "Encrypting Data: " << std::string(input.pData, input.size) << std::endl;
+	std::cout << "Encrypting Block: " << data.ToHex() << std::endl;
+#endif
 
 	BigInt encrypted = data.PowMod(key.e, key.n);
 #ifdef _DEBUG
-	std::cout << "Encrypted Block: " << encrypted.ToRawData() << std::endl;
+	std::cout << "Encrypted Block: " << encrypted.ToHex() << std::endl;
 #endif
 
 	memcpy(out.pData, encrypted.m_vals, encryptedBlockSize);
@@ -149,9 +252,9 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 	memcpy(dst, input.pData, input.size);
 
 #ifdef _DEBUG
-	std::cout << "Decrypting Block: " << std::string(input.pData, input.size) << std::endl;
+	std::cout << "Decrypting Block: " << data.ToHex() << std::endl;
 	const BigInt decrypted = data.PowMod(key.d, key.n);
-	std::cout << "Decrypted Block: " << decrypted.ToRawData() << std::endl;
+	std::cout << "Decrypted Block: " << decrypted.ToHex() << std::endl;
 #else
 	const BigInt decrypted = data.PowMod(key.d, key.n);
 #endif
@@ -179,7 +282,7 @@ void CryptoUtils::BlockSize(const Crypto::KeySize keySize, uint16_t* pDecrypted,
 	if (pEncrypted)
 		*pEncrypted = block;
 	if (pDecrypted)
-		*pDecrypted = block - BLOCK_SIZE_BYTES;
+		*pDecrypted = block - BLOCK_SIZE_BYTES - 1;
 }
 
 BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t& iters)
@@ -230,4 +333,121 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 
 	//std::cout << "Prime number generated with :" << iters << " iterations" << std::endl;
 	return randPrime;
+}
+
+BigInt CryptoUtils::GenerateRandomPrime(const size_t bits)
+{
+	const size_t blocks = bits / (8 * sizeof(BigInt::Base));
+	const size_t remBits = bits % (8 * sizeof(BigInt::Base));
+
+	BigInt randPrime;
+	randPrime.Resize(blocks > 0 ? blocks : 1);
+
+	// Generate random data
+	RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
+	if (!randPrime.IsOdd())
+		randPrime = randPrime + 1;
+
+	// Make sure the highest bit is set
+	if (remBits > 0)
+	{
+		// Bit indexing starts at zero
+		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << (remBits - 1);
+
+		//And clear remaining bits
+		BigInt::Base mask = ~0ULL;
+		for (auto i = remBits; i < sizeof(BigInt::Base) * 8; ++i)
+		{
+			mask &= ~(1ULL << i);
+		}
+		randPrime.m_vals[randPrime.CurrentSize() - 1] &= mask;
+	}
+	else
+	{
+		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << 63;
+	}
+
+	const BigInt two(2);
+	while (!randPrime.IsPrimeNumber())
+	{
+		randPrime = randPrime + two;
+	}
+
+	if (randPrime.GetBitWidth() > bits)
+	{
+		_ASSERT(0);
+		std::cerr << "Generated prime number is larger than expected, retry" << std::endl;
+		return GenerateRandomPrime(bits);
+	}
+
+	return randPrime;
+}
+
+Crypto::CryptoRet CryptoUtils::ValidateKeys(const Crypto::AsymmetricKeys* keys)
+{
+	if (keys == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (keys->privKey == nullptr || keys->pubKey == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (keys->keySize != keys->privKey->keySize)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (keys->keySize != keys->pubKey->keySize)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (keys->privKey->n != keys->pubKey->n)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+
+	Crypto::CryptoRet ret = ValidateKey(keys->privKey);
+	if (ret == Crypto::CryptoRet::OK)
+		ret = ValidateKey(keys->pubKey);
+
+	return ret;
+}
+
+Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey* key)
+{
+	if (key == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (key->d.IsZero() || !key->d.IsPositive())
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (key->n.IsZero() || !key->n.IsPositive())
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+
+	return Crypto::CryptoRet::OK;
+}
+
+Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PublicKey* key)
+{
+	if (key == nullptr)
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (key->e.IsZero() || !key->e.IsPositive())
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (key->n.IsZero() || !key->n.IsPositive())
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (!key->e.IsPrimeNumber()) // e-component must always be prime
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+
+	return Crypto::CryptoRet::OK;
+}
+
+uint16_t CryptoUtils::NeededBufferSizePrivate(const Crypto::KeySize keySize)
+{
+	return BUFFER_SIZE_PRIVATE(keySize);
+
+	const uint16_t preHeader = uint16_t(strlen(BEGIN_PRIVATE_KEY) + sizeof(NEW_LINE));
+	const uint16_t nums = uint16_t(HEX_PREFIX_SIZE + KeyBytes(keySize) * 2 + sizeof(NEW_LINE)) * 2;
+	const uint16_t postHeader = uint16_t(strlen(END_PRIVATE_KEY) + sizeof(NEW_LINE));
+
+	return preHeader + nums + postHeader;
+}
+
+uint16_t CryptoUtils::NeededBufferSizePublic(const Crypto::KeySize keySize)
+{
+	return BUFFER_SIZE_PUBLIC(keySize);
+
+	const uint16_t preHeader = uint16_t(strlen(BEGIN_PUBLIC_KEY) + sizeof(NEW_LINE));
+	const uint16_t nums = uint16_t(HEX_PREFIX_SIZE + KeyBytes(keySize) * 2 + sizeof(NEW_LINE))
+		+ uint16_t(HEX_PREFIX_SIZE + 3 * 2 /* Component-e is three bytes */ + sizeof(NEW_LINE));
+	const uint16_t postHeader = uint16_t(strlen(END_PUBLIC_KEY) + sizeof(NEW_LINE));
+
+	return preHeader + nums + postHeader;
 }
