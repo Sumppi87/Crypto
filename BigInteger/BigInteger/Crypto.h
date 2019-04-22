@@ -64,7 +64,7 @@ public:
 		INTERNAL_ERROR = -4
 	};
 
-#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 55)
+#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 57)
 #define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) + 57 + 3)
 
 public:
