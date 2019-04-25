@@ -294,3 +294,47 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 	}
 	return ret;
 }
+
+uint16_t Crypto::GetBlockSizeEncrypted(const KeySize keySize)
+{
+	uint16_t ret = 0;
+	CryptoUtils::BlockSize(keySize, &ret, nullptr);
+	return ret;
+}
+
+uint16_t Crypto::GetBlockSizePlain(const KeySize keySize)
+{
+	uint16_t ret = 0;
+	CryptoUtils::BlockSize(keySize, nullptr, &ret);
+	return ret;
+}
+
+uint64_t Crypto::GetBlockCountEncryption(const KeySize keySize, const uint64_t dataSizePlain)
+{
+	const auto blockSize = GetBlockSizePlain(keySize);
+	if (blockSize == 0)
+		return 0;
+
+	return (dataSizePlain / blockSize) + (dataSizePlain / blockSize) > 0 ? 1 : 0;
+}
+
+uint64_t Crypto::GetBlockCountDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted)
+{
+	const auto blockSize = GetBlockSizePlain(keySize);
+	if (blockSize == 0)
+		return 0;
+	else if ((dataSizeEncrypted % blockSize) != 0)
+		return 0;
+
+	return dataSizeEncrypted / blockSize;
+}
+
+uint64_t Crypto::GetBufferSizeEncryption(const KeySize keySize, const uint64_t dataSizePlain)
+{
+	return GetBlockCountEncryption(keySize, dataSizePlain) * GetBlockSizeEncrypted(keySize);
+}
+
+uint64_t Crypto::GetBufferSizeDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted)
+{
+	return GetBlockCountEncryption(keySize, dataSizeEncrypted) * GetBlockSizeEncrypted(keySize);
+}

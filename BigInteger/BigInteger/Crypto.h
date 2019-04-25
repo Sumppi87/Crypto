@@ -63,10 +63,6 @@ public:
 		INVALID_PARAMETER = -3,
 		INTERNAL_ERROR = -4
 	};
-
-#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 57)
-#define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) + 57 + 3)
-
 public:
 	// !\Brief Generates a random public/private keypair
 	// !\param[in] size Keysize
@@ -143,5 +139,75 @@ public:
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * ((KeySize / 8) - 3)
 	static CryptoRet Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
+
+	// Utilities
+public:
+	// Macros for calculation needed buffer size for key export
+#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 5)
+#define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) + 5 + 5)
+
+	static uint16_t GetBlockSizeEncrypted(const KeySize keySize);
+	static uint16_t GetBlockSizePlain(const KeySize keySize);
+
+	static uint64_t GetBlockCountEncryption(const KeySize keySize, const uint64_t dataSizePlain);
+	static uint64_t GetBlockCountDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted);
+
+	static uint64_t GetBufferSizeEncryption(const KeySize keySize, const uint64_t dataSizePlain);
+	static uint64_t GetBufferSizeDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted);
+
+	// !\brief Calculates the encrypted data block size
+	// !\param[in] k Used key length
+	template<KeySize k>
+	struct BlockSizeEncrypted
+	{
+		static const uint64_t SIZE = static_cast<uint64_t>(k) / 8;
+	};
+
+	// !\brief Calculates the plain data block size
+	// !\param[in] k Used key length
+	template<KeySize k>
+	struct BlockSizePlain
+	{
+		static const uint64_t SIZE = BlockSizeEncrypted<k>::SIZE - 3;
+	};
+
+	// !\brief Calculates the block count for encryption
+	// !\param[in] k Used key length
+	// !\param[in] dataSizePlain The amount of data to encrypt (in bytes)
+	template<KeySize k, uint64_t dataSizePlain>
+	struct BlockCountEncryption
+	{
+		static const uint64_t SIZE = (dataSizePlain / BlockSizePlain<k>::SIZE)
+			+ ((dataSizePlain % BlockSizePlain<k>::SIZE) > 0 ? 1 : 0);
+	};
+
+	// !\brief Calculates the amount of blocks neede for encryption
+	// !\param[in] k Used key length
+	// !\param[in] size The amount of data to decrypt (in bytes)
+	template<KeySize k, uint64_t size>
+	struct BlockCountDecryption
+	{
+		static_assert((size % BlockSizeEncrypted<k>::SIZE) == 0);
+
+		static const uint64_t SIZE = (size / BlockSizeEncrypted<k>::SIZE);
+	};
+
+	// !\brief Calculates the needed buffer size for encryption
+	// !\param[in] k Used key length
+	// !\param[in] size The amount of data to encrypt (in bytes)
+	template<KeySize k, uint64_t size>
+	struct BufferSizeEncryption
+	{
+		static const uint64_t SIZE = BlockCountEncryption<k, size>::SIZE * BlockSizeEncrypted<k>::SIZE;
+	};
+
+	// !\brief Calculates the needed buffer size for decryption
+	// !\param[in] k Used key length
+	// !\param[in] size The amount of data to decrypt (in bytes)
+	template<KeySize k, uint64_t size>
+	struct BufferSizeDecryption
+	{
+		static const uint64_t SIZE = BlockCountDecryption<k, size>::SIZE * BlockSizePlain<k>::SIZE;
+	};
 };
 

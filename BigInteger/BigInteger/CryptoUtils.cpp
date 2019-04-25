@@ -306,7 +306,7 @@ void CryptoUtils::BlockSize(const Crypto::KeySize keySize, uint16_t* pDecrypted,
 	if (pEncrypted)
 		*pEncrypted = block;
 	if (pDecrypted)
-		*pDecrypted = block - BLOCK_SIZE_BYTES - 1;
+		*pDecrypted = block - BLOCK_SIZE_BYTES - GUARD_BYTES;
 }
 
 BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t& iters)
