@@ -1,4 +1,3 @@
-#include "pch.h"
 #include "CryptoUtils.h"
 #include "BigInt.h"
 #include <iostream>

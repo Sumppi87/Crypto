@@ -1,8 +1,0 @@
-*.vs
-/Debug/*
-*/Debug/*
-/Release/*
-*/Release/*
-*.vcxproj.filters
-*.vcxproj.user
-*/x64/*
