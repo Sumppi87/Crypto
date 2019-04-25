@@ -2,19 +2,12 @@
 #include "CryptoUtils.h"
 #include "BigInt.h"
 #include <iostream>
+#include <sstream>
+#include <unordered_map>
 #include <immintrin.h>
 
 namespace
 {
-	const char NEW_LINE = '\n';
-	const char* BEGIN_PRIVATE_KEY = "=== BEGIN PRIVATE KEY ===";
-	const char* END_PRIVATE_KEY = "=== END PRIVATE KEY ===";
-
-	const char* BEGIN_PUBLIC_KEY = "=== BEGIN PUBLIC KEY ===";
-	const char* END_PUBLIC_KEY = "===  END PUBLIC KEY  ===";
-
-	const uint8_t HEX_PREFIX_SIZE = uint8_t(strlen("0x"));
-
 	// !\brief Encrypted data contains the actual byte count in the block
 	// !\details Byte count is written before actual data.
 	const uint8_t BLOCK_SIZE_BYTES = 2;
@@ -22,6 +15,41 @@ namespace
 	// !\brief 
 	// !\details Byte count is written before actual data.
 	const uint8_t GUARD_BYTES = 1;
+
+	const std::unordered_map<uint16_t, Crypto::KeySize> PRIVATE_FILESIZES = []()
+	{
+		std::unordered_map<uint16_t, Crypto::KeySize> ret;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_64)] = Crypto::KeySize::KS_64;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_128)] = Crypto::KeySize::KS_128;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_256)] = Crypto::KeySize::KS_256;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_512)] = Crypto::KeySize::KS_512;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_1024)] = Crypto::KeySize::KS_1024;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_2048)] = Crypto::KeySize::KS_2048;
+		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_3072)] = Crypto::KeySize::KS_3072;
+		return ret;
+	}();
+
+	bool GetKeySizeFromBufferSize(const uint16_t size, Crypto::KeySize& keySize)
+	{
+		auto iter = PRIVATE_FILESIZES.find(size);
+		if (iter != PRIVATE_FILESIZES.cend())
+		{
+			keySize = (*iter).second;
+			return true;
+		}
+		return false;
+	}
+
+	bool ParseFromRawData(std::istringstream& input, BigInt& num)
+	{
+		std::string n;
+		if (std::getline(input, n))
+		{
+			num = BigInt::FromString(n.data());
+			return true;
+		}
+		return false;
+	}
 
 	uint16_t KeyBytes(const Crypto::KeySize keySize)
 	{
@@ -67,40 +95,27 @@ namespace
 		return num.GetBitWidth() != (keyBytes * 8);
 	}
 
-	void WriteNewline(char** buffer)
+	void WriteNewline(std::ostringstream& buffer)
 	{
-		memcpy(*buffer, &NEW_LINE, sizeof(NEW_LINE));
-		*buffer += sizeof(NEW_LINE);
+		buffer << std::endl;
 	}
 
-	void WriteNumToBuffer(char** buffer, const BigInt& num)
+	void WriteNumToBuffer(std::ostringstream& buffer, const BigInt& num, const bool addNewline)
 	{
 		const auto d = num.ToHex();
-		memcpy(*buffer, d.data(), d.size());
-		*buffer += d.size();
-		WriteNewline(buffer);
-	}
-
-	void WriteHeader(char** buffer, const char* header, const bool addNewline)
-	{
-		memcpy(*buffer, header, strlen(header));
-		*buffer += strlen(header);
+		buffer << d;
 		if (addNewline)
 		{
 			WriteNewline(buffer);
 		}
 	}
 
-	void WriteToBuffer(const char* headerBegin,
-		const char* headerEnd,
-		const BigInt& exponent,
+	void WriteToBuffer(const BigInt& exponent,
 		const BigInt& modulo,
-		char** buffer)
+		std::ostringstream& buffer)
 	{
-		WriteHeader(buffer, headerBegin, true);
-		WriteNumToBuffer(buffer, exponent);
-		WriteNumToBuffer(buffer, modulo);
-		WriteHeader(buffer, headerEnd, false);
+		WriteNumToBuffer(buffer, exponent, true);
+		WriteNumToBuffer(buffer, modulo, false);
 	}
 }
 
@@ -157,9 +172,14 @@ Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PublicKey* key,
 	if (neededBuffer > out.size)
 		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
 
-	auto pData = out.pData;
-	WriteToBuffer(BEGIN_PUBLIC_KEY, END_PUBLIC_KEY, key->n, key->e, &pData);
-	*pPubBytesWritten = uint16_t(pData - out.pData);
+	std::ostringstream buffer;
+	WriteToBuffer(key->n, key->e, buffer);
+	const std::string exportedKey = buffer.str();
+	if (exportedKey.size() > out.size)
+		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
+
+	memcpy(out.pData, exportedKey.data(), exportedKey.size());
+	*pPubBytesWritten = uint16_t(exportedKey.size());
 
 	return Crypto::CryptoRet::OK;
 }
@@ -180,10 +200,14 @@ Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PrivateKey* key,
 	if (neededBuffer > out.size)
 		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
 
-	auto pData = out.pData;
+	std::ostringstream buffer;
+	WriteToBuffer(key->n, key->d, buffer);
+	const std::string exportedKey = buffer.str();
+	if (exportedKey.size() > out.size)
+		return Crypto::CryptoRet::INSUFFICIENT_BUFFER;
 
-	WriteToBuffer(BEGIN_PRIVATE_KEY, END_PRIVATE_KEY, key->n, key->d, &pData);
-	*pPrivBytesWritten = uint16_t(pData - out.pData);
+	memcpy(out.pData, exportedKey.data(), exportedKey.size());
+	*pPrivBytesWritten = uint16_t(exportedKey.size());
 
 	return Crypto::CryptoRet::OK;
 }
@@ -411,6 +435,8 @@ Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey* key)
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 	else if (key->n.IsZero() || !key->n.IsPositive())
 		return Crypto::CryptoRet::INVALID_PARAMETER;
+	else if (key->n.GetByteWidth() != key->d.GetByteWidth())
+		return Crypto::CryptoRet::INVALID_PARAMETER;
 
 	return Crypto::CryptoRet::OK;
 }
@@ -432,22 +458,43 @@ Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PublicKey* key)
 uint16_t CryptoUtils::NeededBufferSizePrivate(const Crypto::KeySize keySize)
 {
 	return BUFFER_SIZE_PRIVATE(keySize);
-
-	const uint16_t preHeader = uint16_t(strlen(BEGIN_PRIVATE_KEY) + sizeof(NEW_LINE));
-	const uint16_t nums = uint16_t(HEX_PREFIX_SIZE + KeyBytes(keySize) * 2 + sizeof(NEW_LINE)) * 2;
-	const uint16_t postHeader = uint16_t(strlen(END_PRIVATE_KEY) + sizeof(NEW_LINE));
-
-	return preHeader + nums + postHeader;
 }
 
 uint16_t CryptoUtils::NeededBufferSizePublic(const Crypto::KeySize keySize)
 {
 	return BUFFER_SIZE_PUBLIC(keySize);
+}
 
-	const uint16_t preHeader = uint16_t(strlen(BEGIN_PUBLIC_KEY) + sizeof(NEW_LINE));
-	const uint16_t nums = uint16_t(HEX_PREFIX_SIZE + KeyBytes(keySize) * 2 + sizeof(NEW_LINE))
-		+ uint16_t(HEX_PREFIX_SIZE + 3 * 2 /* Component-e is three bytes */ + sizeof(NEW_LINE));
-	const uint16_t postHeader = uint16_t(strlen(END_PUBLIC_KEY) + sizeof(NEW_LINE));
+Crypto::CryptoRet CryptoUtils::ImportPrivateKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn priv)
+{
+	if (!GetKeySizeFromBufferSize(uint16_t(priv.size), pKeys->keySize))
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	pKeys->privKey->keySize = pKeys->keySize;
 
-	return preHeader + nums + postHeader;
+	std::istringstream input;
+	input.str(std::string(priv.pData, priv.size));
+
+	if (!ParseFromRawData(input, pKeys->privKey->n)
+		|| !ParseFromRawData(input, pKeys->privKey->d))
+	{
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	}
+
+	return Crypto::CryptoRet::OK;
+}
+
+Crypto::CryptoRet CryptoUtils::ImportPublicKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn pub)
+{
+	pKeys->pubKey->keySize = pKeys->keySize;
+
+	std::istringstream input;
+	input.str(std::string(pub.pData, pub.size));
+
+	if (!ParseFromRawData(input, pKeys->pubKey->n)
+		|| !ParseFromRawData(input, pKeys->pubKey->e))
+	{
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	}
+
+	return Crypto::CryptoRet::OK;
 }

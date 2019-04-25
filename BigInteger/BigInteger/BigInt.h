@@ -87,6 +87,7 @@ public:
 	void SetBit(const uint64_t bitNo);
 
 	uint64_t GetBitWidth() const;
+	uint64_t GetByteWidth() const;
 
 	bool IsBase2(uint64_t& base) const;
 

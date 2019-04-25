@@ -1294,6 +1294,12 @@ uint64_t BigInt::GetBitWidth() const
 	return 0;
 }
 
+uint64_t BigInt::GetByteWidth() const
+{
+	uint64_t bits = GetBitWidth();
+	return (bits / 8) + ((bits % 8) > 0 ? 1 : 0);
+}
+
 bool BigInt::IsBase2(uint64_t& base) const
 {
 	uint64_t t = 0;

@@ -1,8 +1,8 @@
 #include "pch.h"
 #include "Crypto.h"
 #include "BigInt.h"
-#include <iostream>
 #include "CryptoUtils.h"
+#include <iostream>
 
 namespace
 {
@@ -127,9 +127,52 @@ Crypto::CryptoRet Crypto::ExportAsymmetricKeys(AsymmetricKeys* keys,
 	return ret;
 }
 
-Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* keys, const DataOut priv, const DataOut pub)
+Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const DataIn priv, const DataIn pub)
 {
-	return CryptoRet();
+	if (pKeys == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	CryptoRet ret = CryptoRet::OK;
+	try
+	{
+		pKeys->privKey = new PrivateKey();
+		pKeys->pubKey = new PublicKey();
+
+		ret = CryptoUtils::ImportPrivateKey(pKeys, priv);
+		if (ret == CryptoRet::OK)
+			ret = CryptoUtils::ImportPublicKey(pKeys, pub);
+		if (ret == CryptoRet::OK)
+			ret = CryptoUtils::ValidateKeys(pKeys);
+	}
+	catch (const std::invalid_argument& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		// TODO: log the error
+	}
+	catch (const std::logic_error& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		// TODO: log the error
+	}
+	catch (const std::bad_alloc& e)
+	{
+		ret = CryptoRet::INSUFFICIENT_RESOURCES;
+		// TODO: log the error
+	}
+	catch (...)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		// TODO: log the error
+	}
+
+	if (ret != CryptoRet::OK)
+	{
+		delete pKeys->privKey;
+		pKeys->privKey = nullptr;
+		delete pKeys->pubKey;
+		pKeys->pubKey = nullptr;
+	}
+	return ret;
 }
 
 void Crypto::NeededBufferSizeForExport(const KeySize keySize,
