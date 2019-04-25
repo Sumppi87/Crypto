@@ -3,6 +3,9 @@
 
 #include "pch.h"
 #include "BigInt.h"
+#include "Crypto.h"
+#include "CryptoUtils.h"
+#include "FileAccess.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -10,6 +13,55 @@
 #include <chrono>
 #include <functional>
 #include "safeint.h"
+
+namespace
+{
+	const uint16_t ITERS = 1;
+	// Returns modulo inverse of a with respect 
+	// to m using extended Euclid Algorithm 
+	// Assumption: a and m are coprimes, i.e., 
+	// gcd(a, m) = 1 
+	BigInt modInverse(BigInt a, BigInt m)
+	{
+		BigInt m0 = m;
+		BigInt y = 0, x = 1;
+
+		if (m == 1)
+			return 0;
+
+		while (a > 1)
+		{
+			// q is quotient 
+			BigInt q = a / m;
+			BigInt t = m;
+
+			// m is remainder now, process same as 
+			// Euclid's algo 
+			m = a % m, a = t;
+			t = y;
+
+			// Update y and x 
+			y = x - q * y;
+			x = t;
+		}
+
+		// Make x positive 
+		if (x < 0)
+			x = x + m0;
+
+		return x;
+	}
+
+	std::string GetFileName(const Crypto::KeySize keysize, const bool isPrivateKey)
+	{
+		return "key_" + std::to_string(static_cast<unsigned int>(keysize)) + (isPrivateKey ? ".ppk" : ".pub");
+	}
+
+	std::string GetFileName(const bool isPrivateKey)
+	{
+		return std::string("key") + std::string(isPrivateKey ? ".ppk" : ".pub");
+	}
+}
 
 template< typename T >
 std::string NumToHex(const T num, bool padd)
@@ -278,9 +330,73 @@ void TestGCD()
 	std::cout << gcd.ToHex() << std::endl;
 }
 
-void Test_RSA()
+template <Crypto::KeySize keySize,
+	uint32_t DATA,
+	uint32_t BUF_IN = Crypto::BufferSizeEncryption<keySize, DATA>::SIZE,
+	uint32_t BUF_OUT = Crypto::BufferSizeDecryption<keySize, BUF_IN>::SIZE>
+	void TestCryptoAPI(Crypto::DataIn rawData, const int iters = ITERS)
 {
-	const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testing6";
+	//const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testin";
+	std::string data(rawData.pData, rawData.size);
+
+	BigInt keyGenerationSum;
+	BigInt encryptionSum;
+	BigInt decryptionSum;
+	auto failCount = 0;
+	for (int i = 0; i < iters; ++i)
+	{
+		Crypto::AsymmetricKeys keys;
+		std::chrono::high_resolution_clock::time_point keygen_start = std::chrono::high_resolution_clock::now();
+		auto res = Crypto::CreateAsymmetricKeys(keySize, &keys);
+		std::chrono::high_resolution_clock::time_point keygen_end = std::chrono::high_resolution_clock::now();
+
+		char bufferEncrypted[BUF_IN] = {};
+		char bufferDecrypted[BUF_OUT] = {};
+
+		uint64_t encrypted = 0;
+
+		std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
+		auto resEnc = Crypto::Encrypt(keys.pubKey, rawData, Crypto::DataOut(bufferEncrypted, BUF_IN), &encrypted);
+		std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
+
+		uint64_t decrypted = 0;
+
+		std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
+		auto resDec = Crypto::Decrypt(keys.privKey, Crypto::DataIn(bufferEncrypted, encrypted), Crypto::DataOut(bufferDecrypted, BUF_OUT), &decrypted);
+		std::chrono::high_resolution_clock::time_point decryption_end = std::chrono::high_resolution_clock::now();
+
+		auto encryption = std::chrono::duration_cast<std::chrono::milliseconds>(encryption_end - encryption_start).count();
+		auto decryption = std::chrono::duration_cast<std::chrono::milliseconds>(decryption_end - decryption_start).count();
+		auto keyGeneration = std::chrono::duration_cast<std::chrono::milliseconds>(keygen_end - keygen_start).count();
+
+		encryptionSum = encryptionSum + encryption;
+		decryptionSum = decryptionSum + decryption;
+		keyGenerationSum = keyGenerationSum + keyGeneration;
+
+		const std::string decryptedData(bufferDecrypted, decrypted);
+
+		if (decryptedData != data)
+		{
+			//std::cout << "Something went wrong, somewhere.." << std::endl;
+			++failCount;
+		}
+		else
+		{
+			//std::cout << "OK!" << std::endl;
+		}
+
+		Crypto::DeleteAsymmetricKeys(&keys);
+	}
+
+	std::cout << "Failures: " << failCount << "/" << iters << std::endl;
+	std::cout << "Key-generation (" << (uint32_t)keySize << "b) took (avg): " << (keyGenerationSum / iters).ToDec() << "ms" << std::endl;
+	std::cout << "Encryption took (avg): " << (encryptionSum / iters).ToDec() << "ms" << std::endl;
+	std::cout << "Decryption took (avg): " << (decryptionSum / iters).ToDec() << "ms" << std::endl;
+}
+
+void Test_EncryptionDecryption()
+{
+	const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testin";
 	BigInt data = BigInt::FromRawData(rawData, strlen(rawData));
 	const std::string fromRawData = data.ToRawData();
 
@@ -292,7 +408,7 @@ void Test_RSA()
 
 	BigInt e(65537);
 	uint64_t iters = 0;
-	while (n.GreatestCommonDivisor(e, iters) != 1)
+	while (t.GreatestCommonDivisor(e, iters) != 1)
 	{
 		e = e + 1;
 		std::cout << "Booboo" << std::endl;
@@ -311,13 +427,13 @@ void Test_RSA()
 
 	BigInt encryptionSum;
 	BigInt decryptionSum;
-	for (int i = 0; i < 100; ++i)
+	for (int i = 0; i < ITERS; ++i)
 	{
 		std::chrono::high_resolution_clock::time_point encryption_start = std::chrono::high_resolution_clock::now();
 		BigInt encrypted = data.PowMod(e, n);
 		std::chrono::high_resolution_clock::time_point encryption_end = std::chrono::high_resolution_clock::now();
 
-		const std::string encryptedData = encrypted.ToRawData();
+		//const std::string encryptedData = encrypted.ToRawData();
 
 		std::chrono::high_resolution_clock::time_point decryption_start = std::chrono::high_resolution_clock::now();
 		BigInt decrypted = encrypted.PowMod(d, n);
@@ -329,15 +445,15 @@ void Test_RSA()
 		encryptionSum = encryptionSum + encryption;
 		decryptionSum = decryptionSum + decryption;
 
-		std::cout << "Encryption took :" << encryption << "us" << std::endl;
-		std::cout << "Decryption took :" << decryption << "us" << std::endl;
+		//std::cout << "Encryption took :" << encryption << "us" << std::endl;
+		//std::cout << "Decryption took :" << decryption << "us" << std::endl;
 
 		const std::string decryptedData = decrypted.ToRawData();
 
 		{
 			// yeaah
-			std::cout << "Successfully encrypted '" << rawData << "'"
-				<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
+			//std::cout << "Successfully encrypted '" << rawData << "'"
+				//<< std::endl << "And decrypted it: '" << decryptedData << "'" << std::endl;
 		}
 
 		if (decryptedData != rawData)
@@ -346,10 +462,173 @@ void Test_RSA()
 		}
 	}
 
-	std::cout << "Encryption took (avg): " << (encryptionSum / 100).ToDec() << "us" << std::endl;
-	std::cout << "Decryption took (avg): " << (decryptionSum / 100).ToDec() << "us" << std::endl;
+	std::cout << "Encryption took (avg): " << (encryptionSum / ITERS).ToDec() << "us" << std::endl;
+	std::cout << "Decryption took (avg): " << (decryptionSum / ITERS).ToDec() << "us" << std::endl;
 	std::cout << "Keysize :" << n.GetBitWidth() << " bits" << std::endl;
 	std::cout << "Keysize :" << n.CurrentSize() * sizeof(BigInt::Base) << " Bytes" << std::endl;
+}
+
+void Test_PrimeGeneration(const Crypto::KeySize keysize)
+{
+	//const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testin";
+	//const std::string fromRawData(rawData, strlen(rawData));
+
+	auto rand = CryptoUtils::GetRand();
+
+	for (int i = 1; i <= ITERS; ++i)
+	{
+		char rawData[273] = {};
+		rand->RandomData(rawData, 273);
+		std::string fromRawData(rawData, 273);
+
+		uint32_t iters = 0;
+		BigInt p = CryptoUtils::GenerateRandomPrime(keysize, iters);
+		BigInt q = CryptoUtils::GenerateRandomPrime(keysize, iters);
+
+		auto EncryptionTest = [keysize, i, &rawData, &fromRawData, &p, &q]()
+		{
+			Crypto::AsymmetricKeys k;
+			k.keySize = keysize;
+			Crypto::PrivateKey priv;
+			Crypto::PublicKey pub;
+			k.privKey = &priv;
+			k.pubKey = &pub;
+			priv.keySize = keysize;
+			pub.keySize = keysize;
+
+			BigInt n = p * q;
+			BigInt t = (p - 1) * (q - 1);
+
+			BigInt e(3);
+			//BigInt e(65537);
+			uint64_t iterss = 0;
+			while (t.GreatestCommonDivisor(e, iterss) != 1)
+			{
+				e = e + 1;
+				while (!e.IsPrimeNumber())
+					e = e + 1;
+				//std::cout << "Booboo" << std::endl;
+			}
+			// public-key(e, n)
+			BigInt d = e.ModuloMultiplicativeInverse(t);
+			pub.e = e;
+			pub.n = n;
+			priv.d = d;
+			priv.n = n;
+
+			char encrypted[512] = {};
+			char decrypted[512] = {};
+			uint64_t encryptedBytes = 0;
+			uint64_t decryptedBytes = 0;
+			auto encryptRet = Crypto::Encrypt(k.pubKey, Crypto::DataIn(rawData, strlen(rawData)), Crypto::DataOut(encrypted, 512), &encryptedBytes);
+			auto decryptRet = Crypto::Decrypt(k.privKey, Crypto::DataIn(encrypted, encryptedBytes), Crypto::DataOut(decrypted, 512), &decryptedBytes);
+
+			std::string decryptedData(decrypted, decryptedBytes);
+			if (decryptedData != fromRawData)
+			{
+				return false;
+			}
+			else
+			{
+				return true;
+			}
+		};
+
+		if (!EncryptionTest())
+		{
+			std::cout << i << ". FAIL" << std::endl;
+			/*std::cout << "p: " << p.ToDec() << std::endl;
+			std::cout << "q: " << q.ToDec() << std::endl;
+
+			bool succeeded = false;
+			auto ii = 0;
+			for (; ii < 50; ++ii)
+			{
+				if (!EncryptionTest())
+					std::cout << ii << ". ";
+				else
+					succeeded = true;
+			}
+
+			if (succeeded)
+				std::cout << std::endl << "succeeded after " << ii << " attempt" << std::endl << std::endl;
+			else
+				std::cout << std::endl << "Failed for " << ii << ". times in a row" << std::endl << std::endl;
+			*/
+		}
+		else
+		{
+			//std::cout << i << ". OK" << std::endl;
+			//std::cout << "p: " << p.ToDec() << std::endl;
+			//std::cout << "q: " << q.ToDec() << std::endl << std::endl;
+		}
+	}
+}
+
+
+void Testing(const Crypto::KeySize keysize)
+{
+	//const char* rawData = "Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testin";
+	//const char* rawData = "Testing";
+	const char* rawData = "Testin";
+	const std::string fromRawData(rawData, strlen(rawData));
+
+	for (int i = 1; i <= ITERS; ++i)
+	{
+		//uint32_t iters = 0;
+		//BigInt p = CryptoUtils::GenerateRandomPrime(keysize, iters);
+		//BigInt q = CryptoUtils::GenerateRandomPrime(keysize, iters);
+		BigInt p(2360893169ULL);
+		BigInt q(2754862849ULL);
+
+		Crypto::AsymmetricKeys k;
+		k.keySize = keysize;
+		Crypto::PrivateKey priv;
+		Crypto::PublicKey pub;
+		k.privKey = &priv;
+		k.pubKey = &pub;
+		priv.keySize = keysize;
+		pub.keySize = keysize;
+
+		BigInt n = p * q;
+		BigInt t = (p - 1) * (q - 1);
+
+		BigInt e(3);
+		//BigInt e(65539);
+		uint64_t iterss = 0;
+		while (t.GreatestCommonDivisor(e, iterss) != 1)
+		{
+			e = e + 1;
+			while (!e.IsPrimeNumber())
+				e = e + 1;
+
+			//std::cout << "Booboo" << std::endl;
+		}
+		// public-key(e, n)
+		BigInt d = e.ModuloMultiplicativeInverse(t);
+		pub.e = e;
+		pub.n = n;
+		priv.d = d;
+		priv.n = n;
+
+		char encrypted[512] = {};
+		char decrypted[512] = {};
+		uint64_t encryptedBytes = 0;
+		uint64_t decryptedBytes = 0;
+		auto encryptRet = Crypto::Encrypt(k.pubKey, Crypto::DataIn(rawData, strlen(rawData)), Crypto::DataOut(encrypted, 512), &encryptedBytes);
+		auto decryptRet = Crypto::Decrypt(k.privKey, Crypto::DataIn(encrypted, encryptedBytes), Crypto::DataOut(decrypted, 512), &decryptedBytes);
+
+		std::string decryptedData(decrypted, decryptedBytes);
+		if (decryptedData != fromRawData)
+		{
+			std::cerr << "ERR!" << std::endl;
+			//std::cout << p.ToDec() << " : " << q.ToDec() << "  ERR!! " << i << "." << std::endl;
+		}
+		else
+		{
+			//std::cout << "OK!! " << p.ToDec() << " : " << q.ToDec() << std::endl;
+		}
+	}
 }
 
 void RSA_Small()
@@ -368,6 +647,8 @@ void RSA_Small()
 	while (n.GreatestCommonDivisor(e, iters) != 1)
 	{
 		e = e + 1;
+		while (!e.IsPrimeNumber())
+			e = e + 1;
 		std::cout << "Booboo" << std::endl;
 	}
 	// public-key(e, n)
@@ -418,8 +699,525 @@ void TestInPlaceSubs()
 	//Compare(a, res);
 }
 
-int main()
+void TestKeyGeneration(const Crypto::KeySize keysize)
 {
+	uint32_t iters = 0;
+	std::chrono::high_resolution_clock::time_point start = std::chrono::high_resolution_clock::now();
+	const BigInt prime = CryptoUtils::GenerateRandomPrime(keysize, iters);
+	std::chrono::high_resolution_clock::time_point end = std::chrono::high_resolution_clock::now();
+
+	auto dur = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
+	auto dur_us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+	std::cout << "Key generation(" << (uint32_t)keysize << "B / "
+		<< prime.GetBitWidth() << "B) took: " << dur << " s"
+		<< " And " << uint32_t(dur_us / iters) << " us per iteration"
+		<< std::endl;
+	std::cout << "Generated prime: " << prime.ToDec() << std::endl;
+}
+
+template <Crypto::KeySize k,
+	uint16_t priv = BUFFER_SIZE_PRIVATE(k),
+	uint16_t pub = BUFFER_SIZE_PUBLIC(k)>
+	void Test()
+{
+	Crypto::AsymmetricKeys keys;
+	Crypto::CreateAsymmetricKeys(k, &keys);
+
+	char bufferPub[pub] = {};
+	char bufferPriv[priv] = {};
+
+	uint16_t privateBytes = 0;
+	uint16_t publicBytes = 0;
+	Crypto::NeededBufferSizeForExport(k, &privateBytes, &publicBytes);
+
+	uint16_t writtenPriv = 0;
+	uint16_t writtenPub = 0;
+	const Crypto::CryptoRet ret = Crypto::ExportAsymmetricKeys(&keys,
+		Crypto::DataOut(bufferPriv, priv), &writtenPriv,
+		Crypto::DataOut(bufferPub, pub), &writtenPub);
+
+	std::cout << "Public key(" << static_cast<uint16_t>(k) << "b)"
+		<< " Template: '" << pub
+		<< "' Function: '" << publicBytes
+		<< "' Written: '" << writtenPub << "'"
+		<< std::endl;
+	std::cout << "Private key(" << static_cast<uint16_t>(k) << "b)"
+		<< " Template: '" << priv
+		<< "' Function: '" << privateBytes
+		<< "' Written: '" << writtenPriv << "'"
+		<< std::endl;
+
+	auto WriteKeyToFile = [](const char* buffer, const uint16_t bytes, const bool isPrivate)
+	{
+		bool ret = false;
+		std::ofstream stream;
+		if (OpenForWrite(GetFileName(isPrivate), stream)
+			&& !stream.bad())
+		{
+			stream.write(buffer, bytes);
+			ret = !stream.bad();
+			stream.flush();
+			ret &= !stream.bad();
+			stream.close();
+		}
+		return ret;
+	};
+
+	if (!WriteKeyToFile(bufferPriv, writtenPriv, true)
+		|| !WriteKeyToFile(bufferPub, writtenPub, false))
+	{
+		std::cerr << "Error in writing keys to file" << std::endl;
+	}
+
+	Crypto::DeleteAsymmetricKeys(&keys);
+}
+
+void TestKeyImport(Crypto::DataIn rawData, std::string& data)
+{
+	auto ReadKeyFromFile = [](char* buffer, uint16_t& bytes, const bool isPrivate)
+	{
+		bool ret = false;
+
+		std::ifstream stream;
+		if (OpenForRead(GetFileName(isPrivate), stream)
+			&& !stream.bad())
+		{
+			std::filebuf* pbuf = stream.rdbuf();
+			bytes = uint16_t(pbuf->sgetn(buffer, bytes));
+			//bytes = uint16_t(stream.readsome(buffer, bytes));
+			stream.close();
+			ret = bytes > 0;
+		}
+		return ret;
+	};
+
+	uint16_t publicBytes = 2048;
+	uint16_t privateBytes = 2048;
+	char privateKey[2048] = {};
+	char publicKey[2048] = {};
+	Crypto::AsymmetricKeys keys;
+
+	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
+	if (ReadKeyFromFile(privateKey, privateBytes, true)
+		&& ReadKeyFromFile(publicKey, publicBytes, false))
+	{
+		ret = Crypto::ImportAsymmetricKeys(
+			&keys,
+			Crypto::DataIn(privateKey, privateBytes),
+			Crypto::DataIn(publicKey, publicBytes));
+	}
+
+	char bufferDecrypted[4096] = {};
+	uint64_t decrypted = 0;
+
+	auto resDec = Crypto::Decrypt(keys.privKey, rawData, Crypto::DataOut(bufferDecrypted, 4096), &decrypted);
+	data = std::string(bufferDecrypted, decrypted);
+
+	Crypto::DeleteAsymmetricKeys(&keys);
+}
+
+template <Crypto::KeySize k,
+	uint16_t priv = BUFFER_SIZE_PRIVATE(k),
+	uint16_t pub = BUFFER_SIZE_PUBLIC(k)>
+	void TestKeyExport(Crypto::DataIn data, std::string& encrypted)
+{
+	Crypto::AsymmetricKeys keys;
+	Crypto::CreateAsymmetricKeys(k, &keys);
+
+	char bufferPub[pub] = {};
+	char bufferPriv[priv] = {};
+
+	uint16_t privateBytes = 0;
+	uint16_t publicBytes = 0;
+	Crypto::NeededBufferSizeForExport(k, &privateBytes, &publicBytes);
+
+	char buffer[4096] = {};
+	uint64_t encryptedBytes = 0;
+	Crypto::Encrypt(keys.pubKey, data, Crypto::DataOut(buffer, 4096), &encryptedBytes);
+	encrypted = std::string(buffer, encryptedBytes);
+
+	uint16_t writtenPriv = 0;
+	uint16_t writtenPub = 0;
+	const Crypto::CryptoRet ret = Crypto::ExportAsymmetricKeys(&keys,
+		Crypto::DataOut(bufferPriv, priv), &writtenPriv,
+		Crypto::DataOut(bufferPub, pub), &writtenPub);
+
+	auto WriteKeyToFile = [](const char* buffer, const uint16_t bytes, const bool isPrivate)
+	{
+		bool ret = false;
+		std::ofstream stream;
+		if (OpenForWrite(GetFileName(isPrivate), stream)
+			&& !stream.bad())
+		{
+			stream.write(buffer, bytes);
+			ret = !stream.bad();
+			stream.flush();
+			ret &= !stream.bad();
+			stream.close();
+		}
+		return ret;
+	};
+
+	if (!WriteKeyToFile(bufferPriv, writtenPriv, true)
+		|| !WriteKeyToFile(bufferPub, writtenPub, false))
+	{
+		std::cerr << "Error in writing keys to file" << std::endl;
+	}
+
+	Crypto::DeleteAsymmetricKeys(&keys);
+}
+
+template <Crypto::KeySize k>
+void TestKeyExportImport()
+{
+	std::string encryptedData;
+	std::string decryptedData;
+	std::string data("Testing1Testing2Testing3Testing4Testing5Testing6Testing7Testing8Testing9Testing0Testing1Testing2Testing3Testing4Testing5Testin");
+	TestKeyExport<k>(Crypto::DataIn(data.data(), data.size()), encryptedData);
+	TestKeyImport(Crypto::DataIn(encryptedData.data(), encryptedData.size()), decryptedData);
+
+	if (decryptedData != data)
+	{
+		std::cerr << "Testing key export/import failed! Keysize:"
+			<< std::to_string(static_cast<uint32_t>(k)) << std::endl;
+	}
+	else
+	{
+		std::cout << "Testing key export/import succeeded! Keysize:"
+			<< std::to_string(static_cast<uint32_t>(k)) << std::endl;
+	}
+}
+
+template <Crypto::KeySize k,
+	uint16_t priv = BUFFER_SIZE_PRIVATE(k),
+	uint16_t pub = BUFFER_SIZE_PUBLIC(k)>
+	bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
+{
+	char bufferPub[pub] = {};
+	char bufferPriv[priv] = {};
+
+	uint16_t writtenPriv = 0;
+	uint16_t writtenPub = 0;
+	const Crypto::CryptoRet ret = Crypto::ExportAsymmetricKeys(pKeys,
+		Crypto::DataOut(bufferPriv, priv), &writtenPriv,
+		Crypto::DataOut(bufferPub, pub), &writtenPub);
+
+	auto WriteKeyToFile = [](const char* buffer, const uint16_t bytes, const bool isPrivate)
+	{
+		bool ret = false;
+		std::ofstream stream;
+		if (OpenForWrite(GetFileName(isPrivate), stream)
+			&& !stream.bad())
+		{
+			stream.write(buffer, bytes);
+			ret = !stream.bad();
+			stream.flush();
+			ret &= !stream.bad();
+			stream.close();
+		}
+		return ret;
+	};
+
+	if (!WriteKeyToFile(bufferPriv, writtenPriv, true)
+		|| !WriteKeyToFile(bufferPub, writtenPub, false))
+	{
+		std::cerr << "Error in writing keys to file" << std::endl;
+		return false;
+	}
+	return true;
+}
+
+template <typename unsigned int BUF_IN, typename unsigned int BUF_OUT>
+bool EncryptDecrypt(const bool encrypt,
+	Crypto::AsymmetricKeys* pKeys,
+	std::ifstream& in,
+	std::ofstream& out)
+{
+	std::filebuf* pbuf = in.rdbuf();
+	if (pbuf == nullptr)
+	{
+		return false;
+	}
+
+	uint64_t dataWritten = 0;
+	uint64_t dataRead = 0;
+	bool ret = true;
+
+	while (in.good() && out.good() && ret)
+	{
+		char input[BUF_IN] = {}; // Data to encrypt
+		char output[BUF_OUT] = {}; // Encrypted data
+
+		const std::streamsize inputLen = pbuf->sgetn(input, BUF_IN);
+		if (inputLen <= 0)
+			break;
+
+		dataRead += (unsigned int)inputLen;
+
+		uint64_t len = 0;
+		Crypto::CryptoRet status = Crypto::CryptoRet::OK;
+		if (encrypt)
+		{
+			status = Crypto::Encrypt(pKeys->pubKey, Crypto::DataIn(input, inputLen),
+				Crypto::DataOut(output, BUF_OUT), &len);
+		}
+		else
+		{
+			status = Crypto::Decrypt(pKeys->privKey, Crypto::DataIn(input, inputLen),
+				Crypto::DataOut(output, BUF_OUT), &len);
+		}
+
+		if (status == Crypto::CryptoRet::OK && len > 0)
+		{
+			dataWritten += len;
+			out.write(output, len);
+		}
+		else
+		{
+			ret = false;
+		}
+	}
+
+	return ret;
+}
+
+template <Crypto::KeySize k,
+	uint16_t BUF_IN = ((static_cast<uint64_t>(k) / 8) - 3) * 10,
+	uint16_t BUF_OUT = Crypto::BufferSizeEncryption<k, BUF_IN>::SIZE>
+	bool EncryptData(Crypto::AsymmetricKeys* pKeys,
+		const std::string& fileToEncrypt,
+		const std::string& encryptedFile)
+{
+	bool ret = false;
+
+	std::ifstream in;
+	std::ofstream out;
+	if (!OpenForRead(fileToEncrypt, in))
+	{
+		std::cerr << "Failed to file '" << fileToEncrypt << "' for encryption!" << std::endl;
+	}
+	else if (!OpenForWrite(encryptedFile, out))
+	{
+		std::cerr << "Failed to open file '" << encryptedFile << "' for encrypted data!" << std::endl;
+	}
+	else
+	{
+		ret = EncryptDecrypt<BUF_IN, BUF_OUT>(true, pKeys, in, out);
+	}
+
+	in.close();
+	out.flush();
+	out.close();
+
+	if (Crypto::DeleteAsymmetricKeys(pKeys) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Deleting Asymmetric keys failed!" << std::endl;
+		ret = false;
+	}
+	return ret;
+}
+
+template <Crypto::KeySize k>
+bool EncryptData(const std::string& fileToEncrypt, const std::string& encryptedFile)
+{
+	bool ret = false;
+	std::cout << "Generating asymmetric keys... ";
+	Crypto::AsymmetricKeys keys;
+	if (Crypto::CreateAsymmetricKeys(k, &keys) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Error!" << std::endl;
+	}
+	else
+	{
+		std::cout << "Done" << std::endl;
+		std::cout << "Storing generated keys to file... ";
+		if (ExportKeyToFile<k>(&keys))
+		{
+			std::cout << "Done" << std::endl;
+			std::cout << "Encrypting data... ";
+			ret = EncryptData<k>(&keys, fileToEncrypt, encryptedFile);
+			if (ret)
+				std::cout << "Done" << std::endl;
+			else
+				std::cerr << "Error!" << std::endl;
+		}
+		else
+		{
+			std::cerr << "Error!" << std::endl;
+		}
+	}
+	return ret;
+}
+
+bool ImportKeys(Crypto::AsymmetricKeys* pKeys)
+{
+	auto ReadKeyFromFile = [](char* buffer, uint16_t& bytes, const bool isPrivate)
+	{
+		bool ret = false;
+
+		std::ifstream stream;
+		if (OpenForRead(GetFileName(isPrivate), stream)
+			&& !stream.bad())
+		{
+			std::filebuf* pbuf = stream.rdbuf();
+			bytes = uint16_t(pbuf->sgetn(buffer, bytes));
+			//bytes = uint16_t(stream.readsome(buffer, bytes));
+			stream.close();
+			ret = bytes > 0;
+		}
+		return ret;
+	};
+
+	uint16_t publicBytes = 2048;
+	uint16_t privateBytes = 2048;
+	char privateKey[2048] = {};
+	char publicKey[2048] = {};
+
+	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
+	if (ReadKeyFromFile(privateKey, privateBytes, true)
+		&& ReadKeyFromFile(publicKey, publicBytes, false))
+	{
+		ret = Crypto::ImportAsymmetricKeys(
+			pKeys,
+			Crypto::DataIn(privateKey, privateBytes),
+			Crypto::DataIn(publicKey, publicBytes));
+	}
+	return ret == Crypto::CryptoRet::OK;
+}
+
+bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedFile)
+{
+	bool ret = false;
+	Crypto::AsymmetricKeys keys;
+	std::ifstream in;
+	std::ofstream out;
+
+	if (!ImportKeys(&keys))
+	{
+		std::cerr << "Importing keys from files failed" << std::endl;
+	}
+	else if (!OpenForRead(fileToDecrypt, in))
+	{
+		std::cerr << "Opening file '" << fileToDecrypt << "' for decryption failed!" << std::endl;
+	}
+	else if (!OpenForWrite(decryptedFile, out))
+	{
+		std::cerr << "Opening file '" << decryptedFile << "' for decrypted data failed!" << std::endl;
+	}
+	else
+	{
+		switch (keys.keySize)
+		{
+		case Crypto::KeySize::KS_64:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_64) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_64, (static_cast<uint64_t>(Crypto::KeySize::KS_64) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_128:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_128) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_128, (static_cast<uint64_t>(Crypto::KeySize::KS_128) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_256:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_256) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_256, (static_cast<uint64_t>(Crypto::KeySize::KS_256) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_512:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_512) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_512, (static_cast<uint64_t>(Crypto::KeySize::KS_512) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_1024:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_1024) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_1024, (static_cast<uint64_t>(Crypto::KeySize::KS_1024) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_2048:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_2048) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_2048, (static_cast<uint64_t>(Crypto::KeySize::KS_2048) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		case Crypto::KeySize::KS_3072:
+			ret = EncryptDecrypt<(static_cast<uint64_t>(Crypto::KeySize::KS_3072) / 8) * 10,
+				Crypto::BufferSizeDecryption<Crypto::KeySize::KS_3072, (static_cast<uint64_t>(Crypto::KeySize::KS_3072) / 8) * 10>::SIZE>
+				(false, &keys, in, out);
+			break;
+		default:
+			break;
+		}
+	}
+
+	in.close();
+	out.flush();
+	out.close();
+
+	if (Crypto::DeleteAsymmetricKeys(&keys) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Deleting Asymmetric keys failed!" << std::endl;
+		ret = false;
+	}
+
+	return ret;
+}
+
+int main(int argc, char** argv)
+{
+	if (argc != 2)
+		return -1;
+	else if (std::string(argv[1]) == "encrypt")
+		return EncryptData<Crypto::KeySize::KS_64>("test.cpp", "test.cpp.enc");
+	else if (std::string(argv[1]) == "decrypt")
+		return DecryptData("test.cpp.enc", "test_decrypted.cpp");
+	return -1;
+
+	TestKeyExportImport<Crypto::KeySize::KS_64>();
+	TestKeyExportImport<Crypto::KeySize::KS_128>();
+	TestKeyExportImport<Crypto::KeySize::KS_256>();
+	TestKeyExportImport<Crypto::KeySize::KS_512>();
+	TestKeyExportImport<Crypto::KeySize::KS_1024>();
+	TestKeyExportImport<Crypto::KeySize::KS_2048>();
+	TestKeyExportImport<Crypto::KeySize::KS_3072>();
+	return 0;
+	Test<Crypto::KeySize::KS_64>();
+	Test<Crypto::KeySize::KS_128>();
+	Test<Crypto::KeySize::KS_256>();
+	Test<Crypto::KeySize::KS_512>();
+	Test<Crypto::KeySize::KS_1024>();
+	Test<Crypto::KeySize::KS_2048>();
+	Test<Crypto::KeySize::KS_3072>();
+	return 0;
+
+	/*auto rand = CryptoUtils::GetRand();
+	//for (int i = 0; i < 100; ++i)
+	{
+#define BUFFER 139520
+		char data[BUFFER] = {};
+		rand->RandomData(data, BUFFER);
+		Crypto::DataIn rawData(data, BUFFER);
+		TestCryptoAPI<Crypto::KeySize::KS_64, BUFFER>(rawData);
+		TestCryptoAPI<Crypto::KeySize::KS_128, BUFFER>(rawData);
+		TestCryptoAPI<Crypto::KeySize::KS_256, BUFFER>(rawData);
+		TestCryptoAPI<Crypto::KeySize::KS_512, BUFFER>(rawData);
+		TestCryptoAPI<Crypto::KeySize::KS_1024, BUFFER>(rawData);
+		TestCryptoAPI<Crypto::KeySize::KS_2048, BUFFER>(rawData);
+	}*/
+
+	return 0;
+
+	Testing(Crypto::KeySize::KS_64);
+
+	//return 0;
+
+	//TestKeyGeneration(Crypto::KeySize::KS_128);
+	//TestKeyGeneration(Crypto::KeySize::KS_256);
+	//TestKeyGeneration(Crypto::KeySize::KS_512);
+	//while(true)
+	//	TestKeyGeneration(Crypto::KeySize::KS_2048);
+		//TestKeyGeneration(Crypto::KeySize::KS_1024);
+		//TestKeyGeneration(Crypto::KeySize::KS_256);
+	//TestKeyGeneration(Crypto::KeySize::KS_3072);
+
 	TestInPlaceSubs();
 	{
 		Compare(BigInt("0x1FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF80FF0000FF00FFFF")
@@ -432,20 +1230,20 @@ int main()
 				BigInt("0x10000000000000000000000000000000000FF000100000000"));
 
 			Compare(BigInt("0x8000000000FF0001")
-				 + BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF80FF0000FF00FFFF"),
+				+ BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF80FF0000FF00FFFF"),
 				BigInt("0x10000000000000000000000000000000000FF000100000000"));
 		}
 		Compare(BigInt("0x7FFFFFFFFFFFFFFF7FFFFFFFFFFFFFFF800000000000000080000000000000008000000000000000")
-			  + BigInt("0x80000000000000008000000000000000800000000000000070000000000000008000000000000000"),
-			   BigInt("0x1000000000000000000000000000000000000000000000000F0000000000000010000000000000000"));
+			+ BigInt("0x80000000000000008000000000000000800000000000000070000000000000008000000000000000"),
+			BigInt("0x1000000000000000000000000000000000000000000000000F0000000000000010000000000000000"));
 
 		Compare(BigInt("0xFFFFFFFFFFFFFFFF7FFFFFFFFFFFFFFF8000000000000000F000000000000001F0000000FFFFFFFF")
 			+ BigInt("0xFFFFFFFF0000000080000000000000009000000000000000F000000000000001F0000000FFFFFFFF"),
 			BigInt("0x1FFFFFFFF0000000000000000000000001000000000000001E000000000000003E0000001FFFFFFFE"));
 
 		Compare(BigInt("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7FFFFFFFFFFFFFFF7FFFFFFFFFFFFFFFF000000000000101F0000000FFFFFFFF")
-			                                  + BigInt("0x80000000000000008000000000000000F000000000000010F0000000FFFFFFFF"),
-			    BigInt("0x10000000000000000000000000000000000000000000000000000000000000000E000000000000112E0000001FFFFFFFE"));
+			+ BigInt("0x80000000000000008000000000000000F000000000000010F0000000FFFFFFFF"),
+			BigInt("0x10000000000000000000000000000000000000000000000000000000000000000E000000000000112E0000001FFFFFFFE"));
 
 		Compare(BigInt("-0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF7FFFFFFFFFFFFFFF7FFFFFFFFFFFFFFFF000000000000101F0000000FFFFFFFF")
 			- BigInt("0x80000000000000008000000000000000F000000000000010F0000000FFFFFFFF"),
@@ -511,88 +1309,6 @@ int main()
 	Test2();
 	Test();
 
-	Test_RSA();
-
-	return 0;
-	/**/
-	BigInt base8("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-	const BigInt mul8("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-
-	if (base8 > mul8)
-	{
-
-	}
-	if (base8 < mul8)
-	{
-
-	}
-	if (base8 >= mul8)
-	{
-
-	}
-	if (base8 <= mul8)
-	{
-
-	}
-	if (base8 != mul8)
-	{
-
-	}
-	if (base8 == mul8)
-	{
-
-	}
-
-	std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
-	for (auto i = 0; i < 17; ++i)
-	{
-		base8 + mul8;
-	}
-	std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
-
-	auto duration1 = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count();
-
-	BigInt base32("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-	const BigInt mul32("0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-
-	std::chrono::high_resolution_clock::time_point t3 = std::chrono::high_resolution_clock::now();
-
-	for (auto i = 0; i < 17; ++i)
-	{
-		base32 + mul32;
-	}
-	std::chrono::high_resolution_clock::time_point t4 = std::chrono::high_resolution_clock::now();
-
-	auto duration2 = std::chrono::duration_cast<std::chrono::microseconds>(t4 - t3).count();
-
-	std::cout << "With u8: " << duration1 << std::endl;
-	std::cout << "With u32: " << duration2 << std::endl;
-	/**/
-
-	/*
-	for (auto i = 0; i < 11; ++i)
-	{
-		test * BigInt((uint16_t)721);
-		std::cout << test.ToHex().c_str() << std::endl;
-	}*/
-
-
-	/*BigInt res((uint16_t)62208);
-
-	for (auto i = 0; i < 21; ++i)
-	{
-		res * BigInt((uint16_t)62208);
-		std::cout << res.ToHex().c_str() << std::endl;
-	}*/
+	//std::cout << std::endl << "Test implementation" << std::endl;
+	//Test_EncryptionDecryption();
 }
-
-// Run program: Ctrl + F5 or Debug > Start Without Debugging menu
-// Debug program: F5 or Debug > Start Debugging menu
-
-// Tips for Getting Started: 
-//   1. Use the Solution Explorer window to add/manage files
-//   2. Use the Team Explorer window to connect to source control
-//   3. Use the Output window to see build output and other messages
-//   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
-//   6. In the future, to open this project again, go to File > Open > Project and select the .sln file
