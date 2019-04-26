@@ -7,6 +7,24 @@ namespace
 {
 	//! \brief Defines a default public exponent (e in public key)
 	const BigInt DEFAULT_E = BigInt(65537);
+
+	template <typename Buffer1, typename Buffer2>
+	bool ValidateBuffers(const Buffer1 input, const Buffer2 output)
+	{
+		if (input.pData == nullptr || input.size == 0)
+			return false;
+		else if (output.pData == nullptr || output.size == 0)
+			return false;
+		else if ((input.pData > output.pData)
+			&& ((output.pData + output.size) >= input.pData))
+			// Buffers are overlapping
+			return false;
+		else if ((output.pData > input.pData)
+			&& ((input.pData + input.size) >= output.pData))
+			// Buffers are overlapping
+			return false;
+		return true;
+	}
 }
 
 Crypto::AsymmetricKeys::AsymmetricKeys()
@@ -110,7 +128,7 @@ Crypto::CryptoRet Crypto::ExportAsymmetricKeys(AsymmetricKeys* keys,
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pPrivBytesWritten == nullptr || pPubBytesWritten == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
-	else if (priv.pData == nullptr || pub.pData == nullptr)
+	else if (!ValidateBuffers(priv, pub))
 		return CryptoRet::INVALID_PARAMETER;
 
 	CryptoRet ret = CryptoUtils::WriteKeyToBuffer(keys->pubKey, pub, pPubBytesWritten);
@@ -130,6 +148,8 @@ Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const Data
 {
 	if (pKeys == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
+	else if (!ValidateBuffers(priv, pub))
+		return CryptoRet::INVALID_PARAMETER;
 
 	CryptoRet ret = CryptoRet::OK;
 	try
@@ -137,9 +157,13 @@ Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const Data
 		pKeys->privKey = new PrivateKey();
 		pKeys->pubKey = new PublicKey();
 
-		ret = CryptoUtils::ImportPrivateKey(pKeys, priv);
+		ret = CryptoUtils::ImportKey(pKeys->privKey, priv);
 		if (ret == CryptoRet::OK)
-			ret = CryptoUtils::ImportPublicKey(pKeys, pub);
+		{
+			pKeys->keySize = pKeys->privKey->keySize;
+			pKeys->pubKey->keySize = pKeys->privKey->keySize;
+			ret = CryptoUtils::ImportKey(pKeys->pubKey, pub);
+		}
 		if (ret == CryptoRet::OK)
 			ret = CryptoUtils::ValidateKeys(pKeys);
 	}
@@ -188,9 +212,7 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 {
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
-	else if (input.pData == nullptr || input.size == 0)
-		return CryptoRet::INVALID_PARAMETER;
-	else if (output.pData == nullptr || output.size == 0)
+	else if (!ValidateBuffers(input, output))
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pEncryptedBytes == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
@@ -246,9 +268,7 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 {
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
-	else if (input.pData == nullptr || input.size == 0)
-		return CryptoRet::INVALID_PARAMETER;
-	else if (output.pData == nullptr || output.size == 0)
+	else if (!ValidateBuffers(input, output))
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pDecryptedBytes == nullptr)
 		return CryptoRet::INVALID_PARAMETER;

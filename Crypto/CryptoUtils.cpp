@@ -2,7 +2,6 @@
 #include "BigInt.h"
 #include <iostream>
 #include <sstream>
-#include <unordered_map>
 #include <immintrin.h>
 
 namespace
@@ -15,30 +14,6 @@ namespace
 	// !\details Byte count is written before actual data.
 	const uint8_t GUARD_BYTES = 1;
 
-	const std::unordered_map<uint16_t, Crypto::KeySize> PRIVATE_FILESIZES = []()
-	{
-		std::unordered_map<uint16_t, Crypto::KeySize> ret;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_64)] = Crypto::KeySize::KS_64;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_128)] = Crypto::KeySize::KS_128;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_256)] = Crypto::KeySize::KS_256;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_512)] = Crypto::KeySize::KS_512;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_1024)] = Crypto::KeySize::KS_1024;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_2048)] = Crypto::KeySize::KS_2048;
-		ret[BUFFER_SIZE_PRIVATE(Crypto::KeySize::KS_3072)] = Crypto::KeySize::KS_3072;
-		return ret;
-	}();
-
-	bool GetKeySizeFromBufferSize(const uint16_t size, Crypto::KeySize& keySize)
-	{
-		auto iter = PRIVATE_FILESIZES.find(size);
-		if (iter != PRIVATE_FILESIZES.cend())
-		{
-			keySize = (*iter).second;
-			return true;
-		}
-		return false;
-	}
-
 	bool ParseFromRawData(std::istringstream& input, BigInt& num)
 	{
 		std::string n;
@@ -48,6 +23,40 @@ namespace
 			return true;
 		}
 		return false;
+	}
+
+	bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
+	{
+		auto num = n.GetByteWidth() * 8;
+		bool retVal = true;
+		switch (num)
+		{
+		case 64:
+			keySize = Crypto::KeySize::KS_64;
+			break;
+		case 128:
+			keySize = Crypto::KeySize::KS_128;
+			break;
+		case 256:
+			keySize = Crypto::KeySize::KS_256;
+			break;
+		case 512:
+			keySize = Crypto::KeySize::KS_512;
+			break;
+		case 1024:
+			keySize = Crypto::KeySize::KS_1024;
+			break;
+		case 2048:
+			keySize = Crypto::KeySize::KS_2048;
+			break;
+		case 3072:
+			keySize = Crypto::KeySize::KS_3072;
+			break;
+		default:
+			retVal = false;
+			break;
+		}
+		return retVal;
 	}
 
 	uint16_t KeyBytes(const Crypto::KeySize keySize)
@@ -464,33 +473,30 @@ uint16_t CryptoUtils::NeededBufferSizePublic(const Crypto::KeySize keySize)
 	return BUFFER_SIZE_PUBLIC(keySize);
 }
 
-Crypto::CryptoRet CryptoUtils::ImportPrivateKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn priv)
+Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PrivateKey* privKey, const Crypto::DataIn priv)
 {
-	if (!GetKeySizeFromBufferSize(uint16_t(priv.size), pKeys->keySize))
-		return Crypto::CryptoRet::INVALID_PARAMETER;
-	pKeys->privKey->keySize = pKeys->keySize;
-
 	std::istringstream input;
 	input.str(std::string(priv.pData, priv.size));
 
-	if (!ParseFromRawData(input, pKeys->privKey->n)
-		|| !ParseFromRawData(input, pKeys->privKey->d))
+	if (!ParseFromRawData(input, privKey->n)
+		|| !ParseFromRawData(input, privKey->d))
 	{
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 	}
-
+	else if (!GetKeySize(privKey->n, privKey->keySize))
+	{
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	}
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::ImportPublicKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn pub)
+Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PublicKey* pubKey, const Crypto::DataIn pub)
 {
-	pKeys->pubKey->keySize = pKeys->keySize;
-
 	std::istringstream input;
 	input.str(std::string(pub.pData, pub.size));
 
-	if (!ParseFromRawData(input, pKeys->pubKey->n)
-		|| !ParseFromRawData(input, pKeys->pubKey->e))
+	if (!ParseFromRawData(input, pubKey->n)
+		|| !ParseFromRawData(input, pubKey->e))
 	{
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 	}

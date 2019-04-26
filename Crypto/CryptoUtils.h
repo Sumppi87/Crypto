@@ -74,6 +74,6 @@ public:
 	static uint16_t NeededBufferSizePrivate(const Crypto::KeySize keySize);
 	static uint16_t NeededBufferSizePublic(const Crypto::KeySize keySize);
 
-	static Crypto::CryptoRet ImportPrivateKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn priv);
-	static Crypto::CryptoRet ImportPublicKey(Crypto::AsymmetricKeys* pKeys, const Crypto::DataIn pub);
+	static Crypto::CryptoRet ImportKey(Crypto::PrivateKey* privKey, const Crypto::DataIn priv);
+	static Crypto::CryptoRet ImportKey(Crypto::PublicKey* pubKey, const Crypto::DataIn pub);
 };

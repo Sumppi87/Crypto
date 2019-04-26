@@ -233,8 +233,8 @@ bool EncryptData(const Crypto::KeySize keySize, const std::string& fileToEncrypt
 
 			if (ret)
 				std::cout << "Done (" << encryption_dur << "ms)" << std::endl;
-			//else
-			//	std::cerr << "Error!" << std::endl;
+			else
+				std::cerr << "Error!" << std::endl;
 		}
 		else
 		{
