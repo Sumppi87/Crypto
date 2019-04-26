@@ -24,6 +24,40 @@ namespace
 	{
 		return std::string("key") + std::string(isPrivateKey ? ".ppk" : ".pub");
 	}
+
+	bool GetKeySize(const std::string& str, Crypto::KeySize& keySize)
+	{
+		auto num = std::stoi(str);
+		bool retVal = true;
+		switch (num)
+		{
+		case 64:
+			keySize = Crypto::KeySize::KS_64;
+			break;
+		case 128:
+			keySize = Crypto::KeySize::KS_128;
+			break;
+		case 256:
+			keySize = Crypto::KeySize::KS_256;
+			break;
+		case 512:
+			keySize = Crypto::KeySize::KS_512;
+			break;
+		case 1024:
+			keySize = Crypto::KeySize::KS_1024;
+			break;
+		case 2048:
+			keySize = Crypto::KeySize::KS_2048;
+			break;
+		case 3072:
+			keySize = Crypto::KeySize::KS_3072;
+			break;
+		default:
+			retVal = false;
+			break;
+		}
+		return retVal;
+	}
 }
 
 bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
@@ -88,18 +122,18 @@ bool EncryptDecrypt(const bool encrypt,
 	uint64_t dataRead = 0;
 	bool ret = true;
 
-	const auto blockSizePlain = Crypto::GetBlockSizePlain(pKeys->keySize);
-	const auto blockSizeEncrypted = Crypto::GetBlockSizeEncrypted(pKeys->keySize);
+	const auto blockSizeInput = encrypt ? Crypto::GetBlockSizePlain(pKeys->keySize) : Crypto::GetBlockSizeEncrypted(pKeys->keySize);
+	const auto blockSizeOutput = encrypt ? Crypto::GetBlockSizeEncrypted(pKeys->keySize) : Crypto::GetBlockSizePlain(pKeys->keySize);
 	const auto blocks = 1000;
-	char* input = new char[blocks * blockSizePlain];
-	char* output = new char[blocks * blockSizeEncrypted];
+	char* input = new char[blocks * blockSizeInput];
+	char* output = new char[blocks * blockSizeOutput];
 
 	while (in.good() && out.good() && ret)
 	{
-		memset(input, 0, blocks * blockSizePlain);
-		memset(output, 0, blocks * blockSizeEncrypted);
+		memset(input, 0, blocks * blockSizeInput);
+		memset(output, 0, blocks * blockSizeOutput);
 
-		const std::streamsize inputLen = pbuf->sgetn(input, blocks * blockSizePlain);
+		const std::streamsize inputLen = pbuf->sgetn(input, blocks * blockSizeInput);
 		if (inputLen <= 0)
 			break;
 
@@ -110,12 +144,12 @@ bool EncryptDecrypt(const bool encrypt,
 		if (encrypt)
 		{
 			status = Crypto::Encrypt(pKeys->pubKey, Crypto::DataIn(input, inputLen),
-				Crypto::DataOut(output, blocks * blockSizeEncrypted), &len);
+				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 		else
 		{
 			status = Crypto::Decrypt(pKeys->privKey, Crypto::DataIn(input, inputLen),
-				Crypto::DataOut(output, blocks * blockSizeEncrypted), &len);
+				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 
 		if (status == Crypto::CryptoRet::OK && len > 0)
@@ -145,7 +179,7 @@ bool EncryptData(Crypto::AsymmetricKeys* pKeys,
 	std::ofstream out;
 	if (!OpenForRead(fileToEncrypt, in))
 	{
-		std::cerr << "Failed to file '" << fileToEncrypt << "' for encryption!" << std::endl;
+		std::cerr << "Failed to open file '" << fileToEncrypt << "' for encryption!" << std::endl;
 	}
 	else if (!OpenForWrite(encryptedFile, out))
 	{
@@ -199,8 +233,8 @@ bool EncryptData(const Crypto::KeySize keySize, const std::string& fileToEncrypt
 
 			if (ret)
 				std::cout << "Done (" << encryption_dur << "ms)" << std::endl;
-			else
-				std::cerr << "Error!" << std::endl;
+			//else
+			//	std::cerr << "Error!" << std::endl;
 		}
 		else
 		{
@@ -302,12 +336,21 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 
 int main(int argc, char** argv)
 {
-	if (argc != 2)
+	if (argc < 2)
 		return -1;
 	else if (std::string(argv[1]) == "encrypt")
-		return EncryptData(Crypto::KeySize::KS_2048, "test.cpp", "test.cpp.enc");
+	{
+		Crypto::KeySize keySize;
+		if (GetKeySize(argv[2], keySize))
+		{
+			return EncryptData(keySize, "test.cpp", "test.cpp.enc");
+		}
+		else
+			std::cerr << "Error, invalid keysize" << std::endl;
+	}
 	else if (std::string(argv[1]) == "decrypt")
 		return DecryptData("test.cpp.enc", "test_decrypted.cpp");
-
+	else
+		std::cerr << "Error, unknown command" << std::endl;
 	return -1;
 }
