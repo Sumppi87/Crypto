@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <atomic>
 
 #define USE_64BIT_IF_POSSIBLE
 #define MAX_SIZE 64
@@ -99,6 +100,8 @@ public:
 	}
 
 private:
+	void IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pStop) const;
+
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const;
 
 	void CleanPreceedingZeroes();

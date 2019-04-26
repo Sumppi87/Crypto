@@ -1,5 +1,6 @@
 #include "BigInt.h"
 #include "CryptoUtils.h"
+#include "TaskManager.h"
 #include <type_traits>
 #include <string>
 #include <cstdlib>
@@ -8,6 +9,7 @@
 #include <vector>
 #include <intrin.h>
 #include <immintrin.h>
+#include <algorithm>
 
 namespace
 {
@@ -1168,7 +1170,21 @@ bool BigInt::IsPrimeNumber() const
 	else if (*this == 3)
 		return true;
 
-	auto rand = CryptoUtils::GetRand();
+	std::atomic<uint8_t> iters(0);
+	bool isPrime = true;
+
+#ifdef USE_THREADS
+	std::function<void()> f = std::bind(&BigInt::IsPrimeNumberPriv, this, &iters, &isPrime);
+	TaskManager::ExecuteFunction(f);
+#else
+	IsPrimeNumberPriv(&iters, &isPrime);
+#endif
+	return isPrime;
+}
+
+void BigInt::IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pIsPrime) const
+{
+	CryptoUtils::RandomGenerator rand_gen;
 
 	const BigInt& n = *this;
 	const BigInt n_1 = *this - 1;
@@ -1190,14 +1206,17 @@ bool BigInt::IsPrimeNumber() const
 		return false;
 	};
 
-	for (auto i = 0; i < PRIME_TEST_ITERATIONS; ++i)
+	while (*pIsPrime)
 	{
+		auto i = (*iters)++;
+		if (i >= PRIME_TEST_ITERATIONS)
+			break;
 		BigInt a;
 
 		// Pick a size for 'a' between one and CurrentSize of this
-		auto size = (rand->Random64() % CurrentSize()) + 1;
+		auto size = (rand_gen.Random64() % CurrentSize()) + 1;
 		a.Resize(size);
-		rand->RandomData(a.m_vals, a.CurrentSize());
+		rand_gen.RandomData(a.m_vals, a.CurrentSize());
 		a = (a % n_3) + 2;
 
 		BigInt x = a.PowMod(d, *this);
@@ -1209,9 +1228,8 @@ bool BigInt::IsPrimeNumber() const
 		if (InnerLoop(x))
 			continue;
 
-		return false;
+		*pIsPrime = false;
 	}
-	return true;
 }
 
 void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) const

@@ -1,7 +1,9 @@
 #include "Crypto.h"
 #include "BigInt.h"
 #include "CryptoUtils.h"
+#include "TaskManager.h"
 #include <iostream>
+#include <functional>
 
 namespace
 {
@@ -231,13 +233,63 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 	if (neededBuffer > output.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
-	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
+	Crypto::CryptoRet ret = Crypto::CryptoRet::OK;
 
 	if (inPlace)
 	{
 		// TODO
 		ret = Crypto::CryptoRet::INTERNAL_ERROR;
 	}
+#ifdef USE_THREADS
+	else
+	{
+		std::atomic<uint64_t> remainingData = input.size;
+		std::atomic<uint64_t> block = 0;
+		std::atomic<uint64_t> encrypted = 0;
+		auto pBlock = &block;
+		auto pRet = &ret;
+		auto pRemainingData = &remainingData;
+		auto pBytes = &encrypted;
+		auto EncryptFunc = [pBlock, pRet, pBytes, pRemainingData,
+			input, output, blockCount,
+			blockSizeEncrypted, blockSizePlain, key]()
+		{
+			while (*pRet == Crypto::CryptoRet::OK)
+			{
+				auto i = (*pBlock)++;
+				if (i >= blockCount)
+					break;
+
+				uint64_t encryptedBytes = 0;
+				const auto remainingData = pRemainingData->fetch_sub(blockSizePlain);
+				const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
+				auto src = input.pData + (blockSizePlain * i);
+				auto dst = output.pData + (blockSizeEncrypted * i);
+				auto ret = CryptoUtils::EncryptBlock(*key,
+					DataIn(src, size),
+					DataOut(dst, blockSizeEncrypted),
+					&encryptedBytes);
+
+				if (ret == Crypto::CryptoRet::OK)
+				{
+					*pBytes += encryptedBytes;
+				}
+				else
+				{
+					*pRet = ret;
+					break;
+				}
+
+				//*pRemainingData -= blockSizePlain;
+			}
+		};
+
+		TaskManager::ExecuteFunction(EncryptFunc);
+
+		if (ret == CryptoRet::OK)
+			*pEncryptedBytes = encrypted;
+	}
+#else
 	else
 	{
 		auto remainingData = input.size;
@@ -260,6 +312,7 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 			remainingData -= blockSizePlain;
 		}
 	}
+#endif
 
 	return Crypto::CryptoRet::OK;
 }
@@ -287,12 +340,54 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 	if (neededBuffer > output.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
-	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
+	Crypto::CryptoRet ret = Crypto::CryptoRet::OK;
 	if (inPlace)
 	{
 		// TODO
 		ret = Crypto::CryptoRet::INTERNAL_ERROR;
 	}
+#ifdef USE_THREADS
+	else
+	{
+		std::atomic<uint64_t> block = 0;
+		std::atomic<uint64_t> decrypted = 0;
+		auto pBlock = &block;
+		auto pRet = &ret;
+		auto pBytes = &decrypted;
+		auto DecryptFunc = [pBlock, pRet, pBytes, input, output, blockCount, blockSizeEncrypted, blockSizePlain, key]()
+		{
+			while (*pRet == Crypto::CryptoRet::OK)
+			{
+				auto i = (*pBlock)++;
+				if (i >= blockCount)
+					break;
+
+				uint64_t bytes = 0;
+				auto src = input.pData + (blockSizeEncrypted * i);
+				auto dst = output.pData + (blockSizePlain * i);
+				auto ret = CryptoUtils::DecryptBlock(*key,
+					DataIn(src, blockSizeEncrypted),
+					DataOut(dst, blockSizePlain),
+					&bytes);
+
+				if (ret == Crypto::CryptoRet::OK)
+				{
+					*pBytes += bytes;
+				}
+				else
+				{
+					*pRet = ret;
+					break;
+				}
+			}
+		};
+
+		TaskManager::ExecuteFunction(DecryptFunc);
+
+		if (ret == CryptoRet::OK)
+			*pDecryptedBytes = decrypted;
+	}
+#else
 	else
 	{
 		for (auto i = 0; i < blockCount; ++i)
@@ -311,6 +406,7 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 			}
 		}
 	}
+#endif
 	return ret;
 }
 
