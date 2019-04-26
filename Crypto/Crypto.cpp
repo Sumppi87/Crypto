@@ -297,14 +297,14 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 uint16_t Crypto::GetBlockSizeEncrypted(const KeySize keySize)
 {
 	uint16_t ret = 0;
-	CryptoUtils::BlockSize(keySize, &ret, nullptr);
+	CryptoUtils::BlockSize(keySize, nullptr, &ret);
 	return ret;
 }
 
 uint16_t Crypto::GetBlockSizePlain(const KeySize keySize)
 {
 	uint16_t ret = 0;
-	CryptoUtils::BlockSize(keySize, nullptr, &ret);
+	CryptoUtils::BlockSize(keySize, &ret, nullptr);
 	return ret;
 }
 

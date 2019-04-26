@@ -1531,12 +1531,14 @@ void BigInt::Resize(const size_t size)
 	{
 		throw std::invalid_argument("Overflow detected");
 	}
+#ifdef _DEBUG
 	const size_t oldMax = maxSize;
 	maxSize = std::max(size, maxSize);
 	if (maxSize > oldMax)
 	{
 		std::cout << "Max size of BigInt: " << maxSize << std::endl;
 	}
+#endif
 	m_currentSize = size;
 }
 
