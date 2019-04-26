@@ -21,7 +21,7 @@ int OpenFile(FILE** ppFile,
 	HANDLE hFile = CreateFile(ws.c_str(), dwDesiredAccess, 0, NULL, dwCreationDisposition, 0, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 	{
-		std::cout << "File creation failed\n";
+		//std::cout << "File creation failed\n";
 		return -1;
 	}
 
@@ -31,13 +31,13 @@ int OpenFile(FILE** ppFile,
 		pFile = _fdopen(file_descriptor, mode);
 		if (pFile == nullptr)
 		{
-			std::cout << "Opening FD failed\n";
+			//std::cout << "Opening FD failed\n";
 			return -2;
 		}
 	}
 	else
 	{
-		std::cout << "Opening OSFhandle failed\n";
+		//std::cout << "Opening OSFhandle failed\n";
 		return -3;
 	}
 
@@ -57,7 +57,7 @@ bool OpenForRead(const std::string& filename, std::ifstream& stream)
 	stream = std::ifstream(pFile);
 	if (!stream.is_open())
 	{
-		std::cout << "Opening the stream failed\n";
+		//std::cout << "Opening the stream failed\n";
 		return false;
 	}
 	return true;
@@ -75,7 +75,7 @@ bool OpenForWrite(const std::string& filename, std::ofstream& stream)
 	stream = std::ofstream(pFile);
 	if (!stream.is_open())
 	{
-		std::cout << "Opening the stream failed\n";
+		//std::cout << "Opening the stream failed\n";
 		return false;
 	}
 	return true;
