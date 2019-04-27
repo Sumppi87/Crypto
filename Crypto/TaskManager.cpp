@@ -7,6 +7,39 @@
 
 TaskManager TaskManager::TASK_MANAGER;
 
+Task::Task(const std::function<void()>& func)
+	: m_func(func)
+	, m_state(State::NOT_STARTED) {}
+
+void Task::Execute()
+{
+	std::unique_lock lock(m_lock);
+	m_state = State::RUNNING;
+	lock.unlock();
+
+	if (m_func)
+		m_func();
+
+	m_state = State::FINISHED;
+	m_cond.notify_all();
+}
+
+bool Task::IsFinished() const
+{
+	return m_state == State::FINISHED;
+}
+
+void Task::WaitForFinished()
+{
+	std::unique_lock lock(m_lock);
+
+	// condition_variable::wait can wakeup spuriously
+	while (!IsFinished())
+	{
+		m_cond.wait(lock);
+	}
+}
+
 void TaskManager::AddTask(Task* pTask)
 {
 	std::unique_lock lock(TASK_MANAGER.m_tasksLock);

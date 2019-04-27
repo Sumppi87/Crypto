@@ -8,10 +8,10 @@ namespace
 {
 	// !\brief Encrypted data contains the actual byte count in the block
 	// !\details Byte count is written before actual data.
-	const uint8_t BLOCK_SIZE_BYTES = 2;
+	const uint8_t BLOCK_SIZE_BYTES = 2U;
 
-	// !\brief 
-	// !\details Byte count is written before actual data.
+	// !\brief
+	// !\details Byte count is wruitten before actual data.
 	const uint8_t GUARD_BYTES = 1;
 
 	bool ParseFromRawData(std::istringstream& input, BigInt& num)
@@ -27,29 +27,29 @@ namespace
 
 	bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
 	{
-		auto num = n.GetByteWidth() * 8;
+		auto num = n.GetByteWidth() * 8U;
 		bool retVal = true;
 		switch (num)
 		{
-		case 64:
+		case 64U:
 			keySize = Crypto::KeySize::KS_64;
 			break;
-		case 128:
+		case 128U:
 			keySize = Crypto::KeySize::KS_128;
 			break;
-		case 256:
+		case 256U:
 			keySize = Crypto::KeySize::KS_256;
 			break;
-		case 512:
+		case 512U:
 			keySize = Crypto::KeySize::KS_512;
 			break;
-		case 1024:
+		case 1024U:
 			keySize = Crypto::KeySize::KS_1024;
 			break;
-		case 2048:
+		case 2048U:
 			keySize = Crypto::KeySize::KS_2048;
 			break;
-		case 3072:
+		case 3072U:
 			keySize = Crypto::KeySize::KS_3072;
 			break;
 		default:
@@ -61,29 +61,29 @@ namespace
 
 	uint16_t KeyBytes(const Crypto::KeySize keySize)
 	{
-		uint16_t block = 0;
+		uint16_t block = 0U;
 		switch (keySize)
 		{
 		case Crypto::KeySize::KS_64:
-			block = 8;
+			block = 8U;
 			break;
 		case Crypto::KeySize::KS_128:
-			block = 16;
+			block = 16U;
 			break;
 		case Crypto::KeySize::KS_256:
-			block = 32;
+			block = 32U;
 			break;
 		case Crypto::KeySize::KS_512:
-			block = 64;
+			block = 64U;
 			break;
 		case Crypto::KeySize::KS_1024:
-			block = 128;
+			block = 128U;
 			break;
 		case Crypto::KeySize::KS_2048:
-			block = 256;
+			block = 256U;
 			break;
 		case Crypto::KeySize::KS_3072:
-			block = 384;
+			block = 384U;
 			break;
 		default:
 			break;
@@ -94,13 +94,13 @@ namespace
 	bool operator>(const BigInt& num, const Crypto::KeySize keysize)
 	{
 		const auto keyBytes = KeyBytes(keysize);
-		return num.GetBitWidth() > (keyBytes * 8);
+		return num.GetBitWidth() > (keyBytes * 8U);
 	}
 
 	bool operator!=(const BigInt& num, const Crypto::KeySize keysize)
 	{
 		const auto keyBytes = KeyBytes(keysize);
-		return num.GetBitWidth() != (keyBytes * 8);
+		return num.GetBitWidth() != (keyBytes * 8U);
 	}
 
 	void WriteNewline(std::ostringstream& buffer)
@@ -133,7 +133,7 @@ CryptoUtils::RandomGenerator::RandomGenerator()
 unsigned char CryptoUtils::RandomGenerator::Random()
 {
 	// Value range [0...255]
-	return m_gen() % (std::numeric_limits<unsigned char>::max() + 1);
+	return m_gen() % (std::numeric_limits<unsigned char>::max() + 1U);
 }
 
 uint64_t CryptoUtils::RandomGenerator::Random64()
@@ -143,15 +143,15 @@ uint64_t CryptoUtils::RandomGenerator::Random64()
 
 void CryptoUtils::RandomGenerator::RandomData(char* pData, const size_t count)
 {
-	for (auto i = 0; i < count; ++i)
+	for (size_t i = 0U; i < count; ++i)
 	{
-		pData[i] = Random();
+		pData[i] = char(Random());
 	}
 }
 
 void CryptoUtils::RandomGenerator::RandomData(uint64_t* pData, const size_t count)
 {
-	for (auto i = 0; i < count; ++i)
+	for (size_t i = 0U; i < count; ++i)
 	{
 		pData[i] = Random64();
 	}
@@ -225,8 +225,8 @@ Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	const Crypto::DataOut out,
 	uint64_t* pEncryptedBytes)
 {
-	uint16_t encryptedBlockSize = 0;
-	uint16_t decryptedBlockSize = 0;
+	uint16_t encryptedBlockSize = 0U;
+	uint16_t decryptedBlockSize = 0U;
 	BlockSize(key.keySize, &decryptedBlockSize, &encryptedBlockSize);
 	if (input.size > decryptedBlockSize)
 	{
@@ -269,8 +269,8 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 	const Crypto::DataOut out,
 	uint64_t* pDecryptedBytes)
 {
-	uint16_t encryptedBlockSize = 0;
-	uint16_t decryptedBlockSize = 0;
+	uint16_t encryptedBlockSize = 0U;
+	uint16_t decryptedBlockSize = 0U;
 	BlockSize(key.keySize, &decryptedBlockSize, &encryptedBlockSize);
 	if (input.size > encryptedBlockSize)
 	{
@@ -291,11 +291,11 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 	const BigInt decrypted = data.PowMod(key.d, key.n);
 #endif
 
-	uint16_t blockSize = 0;
+	uint16_t blockSize = 0U;
 	const char* decryptedDst = reinterpret_cast<const char*>(decrypted.m_vals);
 	memcpy(&blockSize, decryptedDst, BLOCK_SIZE_BYTES);
 
-	if (blockSize == 0 || blockSize > decryptedBlockSize)
+	if (blockSize == 0U || blockSize > decryptedBlockSize)
 	{
 		// Something went wrong, block size is invalid
 		return Crypto::CryptoRet::INTERNAL_ERROR;
@@ -314,13 +314,13 @@ void CryptoUtils::BlockSize(const Crypto::KeySize keySize, uint16_t* pDecrypted,
 	if (pEncrypted)
 		*pEncrypted = block;
 	if (pDecrypted)
-		*pDecrypted = block - BLOCK_SIZE_BYTES - GUARD_BYTES;
+		*pDecrypted = uint16_t(block - (BLOCK_SIZE_BYTES + GUARD_BYTES));
 }
 
 BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t& iters)
 {
-	const uint16_t keyBytes = KeyBytes(keySize) / 2;
-	const uint16_t blocks = keyBytes > sizeof(BigInt::Base) ? keyBytes / sizeof(BigInt::Base) : 1;
+	const uint16_t keyBytes = KeyBytes(keySize) / 2U;
+	const uint16_t blocks = keyBytes > sizeof(BigInt::Base) ? keyBytes / sizeof(BigInt::Base) : 1U;
 
 	BigInt randPrime;
 	randPrime.Resize(blocks);
@@ -330,24 +330,24 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 		// Generate random data
 		RAND.RandomData((char*)randPrime.m_vals, keyBytes);
 		if (!randPrime.IsOdd())
-			randPrime = randPrime + 1;
+			randPrime = randPrime + 1U;
 
 		// Make sure the highest bit is set
-		randPrime.m_vals[0] |= 1ULL << 31;
+		randPrime.m_vals[0U] |= 1ULL << 31U;
 	}
 	else
 	{
 		// Generate random data
 		RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
 		if (!randPrime.IsOdd())
-			randPrime = randPrime + 1;
+			randPrime = randPrime + 1U;
 
 		// Make sure the highest bit is set
-		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << 63;
+		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << 63U;
 	}
 
-	const BigInt two(2);
-	iters = 1;
+	const BigInt two(2U);
+	iters = 1U;
 	while (!randPrime.IsPrimeNumber())
 	{
 		//RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
@@ -369,37 +369,37 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 
 BigInt CryptoUtils::GenerateRandomPrime(const size_t bits)
 {
-	const size_t blocks = bits / (8 * sizeof(BigInt::Base));
-	const size_t remBits = bits % (8 * sizeof(BigInt::Base));
+	const size_t blocks = bits / (8U * sizeof(BigInt::Base));
+	const size_t remBits = bits % (8U * sizeof(BigInt::Base));
 
 	BigInt randPrime;
-	randPrime.Resize(blocks > 0 ? blocks : 1);
+	randPrime.Resize(blocks > 0U ? blocks : 1U);
 
 	// Generate random data
 	RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
 	if (!randPrime.IsOdd())
-		randPrime = randPrime + 1;
+		randPrime = randPrime + 1U;
 
 	// Make sure the highest bit is set
-	if (remBits > 0)
+	if (remBits > 0U)
 	{
 		// Bit indexing starts at zero
-		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << (remBits - 1);
+		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << (remBits - 1U);
 
 		//And clear remaining bits
 		BigInt::Base mask = ~0ULL;
-		for (auto i = remBits; i < sizeof(BigInt::Base) * 8; ++i)
+		for (auto i = remBits; i < sizeof(BigInt::Base) * 8U; ++i)
 		{
 			mask &= ~(1ULL << i);
 		}
-		randPrime.m_vals[randPrime.CurrentSize() - 1] &= mask;
+		randPrime.m_vals[randPrime.CurrentSize() - 1U] &= mask;
 	}
 	else
 	{
-		randPrime.m_vals[randPrime.CurrentSize() - 1] |= 1ULL << 63;
+		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << 63U;
 	}
 
-	const BigInt two(2);
+	const BigInt two(2U);
 	while (!randPrime.IsPrimeNumber())
 	{
 		randPrime = randPrime + two;

@@ -124,7 +124,7 @@ bool EncryptDecrypt(const bool encrypt,
 
 	const auto blockSizeInput = encrypt ? Crypto::GetBlockSizePlain(pKeys->keySize) : Crypto::GetBlockSizeEncrypted(pKeys->keySize);
 	const auto blockSizeOutput = encrypt ? Crypto::GetBlockSizeEncrypted(pKeys->keySize) : Crypto::GetBlockSizePlain(pKeys->keySize);
-	const auto blocks = 1000;
+	const auto blocks = 1000U;
 	char* input = new char[blocks * blockSizeInput];
 	char* output = new char[blocks * blockSizeOutput];
 
@@ -139,23 +139,23 @@ bool EncryptDecrypt(const bool encrypt,
 
 		dataRead += (unsigned int)inputLen;
 
-		uint64_t len = 0;
+		uint64_t len = 0U;
 		Crypto::CryptoRet status = Crypto::CryptoRet::OK;
 		if (encrypt)
 		{
-			status = Crypto::Encrypt(pKeys->pubKey, Crypto::DataIn(input, inputLen),
+			status = Crypto::Encrypt(pKeys->pubKey, Crypto::DataIn(input, uint64_t(inputLen)),
 				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 		else
 		{
-			status = Crypto::Decrypt(pKeys->privKey, Crypto::DataIn(input, inputLen),
+			status = Crypto::Decrypt(pKeys->privKey, Crypto::DataIn(input, uint64_t(inputLen)),
 				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 
-		if (status == Crypto::CryptoRet::OK && len > 0)
+		if (status == Crypto::CryptoRet::OK && len > 0U)
 		{
 			dataWritten += len;
-			out.write(output, len);
+			out.write(output, std::streamsize(len));
 		}
 		else
 		{

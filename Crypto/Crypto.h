@@ -7,7 +7,7 @@ public:
 	struct PublicKey;
 	struct PrivateKey;
 
-	enum class KeySize
+	enum class KeySize : uint64_t
 	{
 		KS_64 = 64,
 		KS_128 = 128,
@@ -29,13 +29,7 @@ public:
 
 	struct DataIn
 	{
-		DataIn()
-			: pData(nullptr)
-			, size(0) {}
-
-		DataIn(const char* data, const uint64_t s)
-			: pData(data)
-			, size(s) {}
+		DataIn(const char* data, const uint64_t s);
 
 		const char* pData;
 		uint64_t size;
@@ -43,13 +37,7 @@ public:
 
 	struct DataOut
 	{
-		DataOut()
-			: pData(nullptr)
-			, size(0) {}
-
-		DataOut(char* data, const uint64_t s)
-			: pData(data)
-			, size(s) {}
+		DataOut(char* data, const uint64_t s);
 
 		char* pData;
 		uint64_t size;
@@ -143,8 +131,8 @@ public:
 	// Utilities
 public:
 	// Macros for calculation needed buffer size for key export
-#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) * 2 + 5)
-#define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8) * 2) + 5 + 5)
+#define BUFFER_SIZE_PRIVATE(keySize) (((static_cast<uint16_t>(keySize) / 8U) * 2U) * 2U + 5U)
+#define BUFFER_SIZE_PUBLIC(keySize) (((static_cast<uint16_t>(keySize) / 8U) * 2U) + 5U + 5U)
 
 	static uint16_t GetBlockSizeEncrypted(const KeySize keySize);
 	static uint16_t GetBlockSizePlain(const KeySize keySize);

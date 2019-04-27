@@ -23,10 +23,6 @@ public:
 	static BigInt FromString(const char* input);
 
 	BigInt();
-	BigInt(const BigInt& other);
-	BigInt(const BigInt&& move);
-	BigInt& operator=(const BigInt& other);
-	BigInt& operator=(const BigInt&& other);
 
 	BigInt(const uint8_t val);
 	BigInt(const uint16_t val);
@@ -152,16 +148,15 @@ private:
 	BigInt(const Base* data, const size_t currentSize);
 
 private:
-	Base m_vals[MAX_SIZE];
-	size_t m_currentSize;
-
-	enum Sign
+	enum class Sign : size_t
 	{
-		POS = 1,
-		NEG = -1
+		POS,
+		NEG
 	};
 
 	Sign m_sign;
+	size_t m_currentSize;
+	Base m_vals[MAX_SIZE];
 
 	friend class CryptoUtils;
 };

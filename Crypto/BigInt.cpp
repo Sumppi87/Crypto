@@ -15,91 +15,98 @@ namespace
 {
 	// How many iterations to perform when testing whether a value is a prime or not
 	// With 60, a chance for a false positive is 1 / (2^128)
-	const uint8_t PRIME_TEST_ITERATIONS = 60;
+	const uint8_t PRIME_TEST_ITERATIONS = 60U;
 
-	char NumToChar(const uint8_t num)
+	const unsigned char BASE_BITS = sizeof(BigInt::Base) * 8U;
+
+	char NumToChar(const uint8_t num, const bool isHex)
 	{
 		switch (num)
 		{
-		case 0:
+		case 0U:
 			return '0';
-		case 1:
+		case 1U:
 			return '1';
-		case 2:
+		case 2U:
 			return '2';
-		case 3:
+		case 3U:
 			return '3';
-		case 4:
+		case 4U:
 			return '4';
-		case 5:
+		case 5U:
 			return '5';
-		case 6:
+		case 6U:
 			return '6';
-		case 7:
+		case 7U:
 			return '7';
-		case 8:
+		case 8U:
 			return '8';
-		case 9:
+		case 9U:
 			return '9';
-		case 10:
-			return 'A';
-		case 11:
-			return 'B';
-		case 12:
-			return 'C';
-		case 13:
-			return 'D';
-		case 14:
-			return 'E';
-		case 15:
-			return 'F';
 		default:
-			throw std::invalid_argument("Not a valid hexadecimal");
-			break;
+			if (!isHex)
+				throw std::invalid_argument("Not a valid decimal number");
+			switch (num)
+			{
+			case 10U:
+				return 'A';
+			case 11U:
+				return 'B';
+			case 12U:
+				return 'C';
+			case 13U:
+				return 'D';
+			case 14U:
+				return 'E';
+			case 15U:
+				return 'F';
+			default:
+				throw std::invalid_argument("Not a valid hexadecimal");
+			}
 		}
 	}
 
-	uint8_t CharToNum(const char c, bool isHex)
+	uint8_t CharToNum(const char c, const bool isHex)
 	{
 		switch (c)
 		{
 		case '0':
-			return 0;
+			return 0U;
 		case '1':
-			return 1;
+			return 1U;
 		case '2':
-			return 2;
+			return 2U;
 		case '3':
-			return 3;
+			return 3U;
 		case '4':
-			return 4;
+			return 4U;
 		case '5':
-			return 5;
+			return 5U;
 		case '6':
-			return 6;
+			return 6U;
 		case '7':
-			return 7;
+			return 7U;
 		case '8':
-			return 8;
+			return 8U;
 		case '9':
-			return 9;
+			return 9U;
 		default:
 			if (!isHex)
 				throw std::invalid_argument("Not a valid decimal number");
 			switch (c)
 			{
 			case 'A':
-				return 10;
+				return 10U;
 			case 'B':
-				return 11;
+				return 11U;
 			case 'C':
-				return 12;
+				return 12U;
 			case 'D':
-				return 13;
+				return 13U;
 			case 'E':
-				return 14;
+				return 14U;
 			case 'F':
-				return 15;
+				return 15U;
 			default:
 				throw std::invalid_argument("Not a valid hexadecimal");
 				break;
@@ -154,9 +161,9 @@ namespace
 #if defined (USE_64BIT_VALUES)
 	inline void AddResult(uint64_t* src, const uint64_t val)
 	{
-		if (_addcarry_u64(0, val, *src, src))
+		if (_addcarry_u64(0U, val, *src, src))
 		{
-			AddResult(src + 1, 1);
+			AddResult(src + 1U, 1U);
 		}
 	};
 
@@ -164,7 +171,7 @@ namespace
 	{
 		if (_subborrow_u64(carry, *src, val, src))
 		{
-			SubResult(src + 1, 0, 1);
+			SubResult(src + 1U, 0U, 1U);
 		}
 	};
 
@@ -221,7 +228,7 @@ BigInt BigInt::FromRawData(const char* data, const size_t length)
 {
 	BigInt res;
 
-	res.Resize((length / sizeof(Base)) + (length % sizeof(Base) > 0 ? 1 : 0));
+	res.Resize((length / sizeof(Base)) + (length % sizeof(Base) > 0U ? 1U : 0U));
 	memcpy(&res.m_vals, data, length);
 
 	return res;
@@ -239,11 +246,11 @@ BigInt& BigInt::ParseStrInput(const char* input)
 		throw std::invalid_argument("Not a valid input");
 	}
 	auto length = strlen(input);
-	if (length < 1)
+	if (length < 1U)
 	{
 		throw std::invalid_argument("Not a valid input");
 	}
-	if (input[0] == '-')
+	if (input[0U] == '-')
 	{
 		// It's a negative number
 		++input;
@@ -251,9 +258,9 @@ BigInt& BigInt::ParseStrInput(const char* input)
 		m_sign = Sign::NEG;
 	}
 
-	if (length > 2 && input[0] == '0' && input[1] == 'x')
+	if (length > 2U && input[0U] == '0' && input[1U] == 'x')
 	{
-		input += 2;
+		input += 2U;
 		FromBase16(input);
 	}
 	else
@@ -271,17 +278,17 @@ void BigInt::FromBase10(const char* input)
 		throw std::invalid_argument("Not a valid decimal");
 	}
 	auto length = strlen(input);
-	if (length < 1)
+	if (length < 1U)
 	{
 		throw std::invalid_argument("Not a valid decimal");
 	}
 
-	BigInt ten(10);
+	const BigInt ten(10U);
 
-	for (size_t i = 0; i < length; ++i)
+	for (size_t i = 0U; i < length; ++i)
 	{
 		BigInt digit;
-		digit.m_vals[size_t(0)] = CharToNum(input[i], false);
+		digit.m_vals[0U] = CharToNum(input[i], false);
 		*this = *this * ten;
 		*this = *this + digit;
 	}
@@ -294,24 +301,22 @@ void BigInt::FromBase16(const char* hex)
 		throw std::invalid_argument("Not a valid hexadecimal");
 	}
 	auto length = strlen(hex);
-	if (length < 1)
+	if (length < 1U)
 	{
 		throw std::invalid_argument("Not a valid hexadecimal");
 	}
 
-	std::lldiv_t div = std::lldiv(int64_t(length), int64_t((sizeof(Base) * 2)));
-	const size_t neededSize = div.rem == 0 ? div.quot : div.quot + 1;
+	const size_t neededSize = length / (sizeof(Base) * 2U) + ((length % (sizeof(Base) * 2U)) > 0U ? 1U : 0U);
 	Resize(neededSize);
 
-	for (size_t i = length - 1;; --i)
+	for (size_t i = length - 1U;; --i)
 	{
-		const std::div_t d = std::div(int((length - 1) - i), int(sizeof(Base) * 2));
-		const size_t index = d.quot;
-		const size_t shift = d.rem * 4;
+		const size_t index = ((length - 1U) - i) / (sizeof(Base) * 2U);
+		const size_t shift = (((length - 1U) - i) % (sizeof(Base) * 2U)) * 4U;
 		const Base val = CharToNum(hex[i], true);
 		const Base shifted = (val << shift);
 		m_vals[index] += shifted;
-		if (i == 0)
+		if (i == 0U)
 		{
 			break;
 		}
@@ -323,49 +328,7 @@ BigInt::BigInt()
 	, m_currentSize(1)
 	, m_vals{}
 {
-	m_vals[0] = 0;
-}
-
-BigInt::BigInt(const BigInt& other)
-	: m_sign(other.m_sign)
-	, m_currentSize(other.m_currentSize)
-	, m_vals{}
-{
-	CopyFromSrc(other.m_vals, other.CurrentSize(), 0);
-}
-
-BigInt::BigInt(const BigInt&& move)
-	: m_sign(move.m_sign)
-	, m_currentSize(move.m_currentSize)
-	, m_vals{}
-{
-	CopyFromSrc(move.m_vals, m_currentSize, 0);
-}
-
-BigInt& BigInt::operator=(const BigInt& other)
-{
-	m_sign = other.m_sign;
-
-	// Clear any old values before assigment if *this is larger
-	if (other.m_currentSize < m_currentSize)
-		memset(m_vals, 0, m_currentSize * sizeof(Base));
-
-	m_currentSize = other.m_currentSize;
-	CopyFromSrc(other.m_vals, m_currentSize, 0);
-	return *this;
-}
-
-BigInt& BigInt::operator=(const BigInt&& other)
-{
-	m_sign = other.m_sign;
-
-	// Clear any old values before assigment if *this is larger
-	if (other.m_currentSize < m_currentSize)
-		memset(m_vals, 0, m_currentSize * sizeof(Base));
-
-	m_currentSize = other.m_currentSize;
-	CopyFromSrc(other.m_vals, m_currentSize, 0);
-	return *this;
+	m_vals[0U] = 0U;
 }
 
 BigInt::BigInt(const Base* data, const size_t currentSize)
@@ -373,12 +336,12 @@ BigInt::BigInt(const Base* data, const size_t currentSize)
 	, m_currentSize(currentSize)
 	, m_vals{}
 {
-	CopyFromSrc(data, currentSize, 0);
+	CopyFromSrc(data, currentSize, 0U);
 }
 
 BigInt::BigInt(const uint8_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0)
+	, m_currentSize(0U)
 	, m_vals{}
 {
 	FromNum(val, sizeof(uint8_t));
@@ -386,7 +349,7 @@ BigInt::BigInt(const uint8_t val)
 
 BigInt::BigInt(const uint16_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0)
+	, m_currentSize(0U)
 	, m_vals{}
 {
 	FromNum(val, sizeof(uint16_t));
@@ -394,7 +357,7 @@ BigInt::BigInt(const uint16_t val)
 
 BigInt::BigInt(const uint32_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0)
+	, m_currentSize(0U)
 	, m_vals{}
 {
 	FromNum(val, sizeof(uint32_t));
@@ -402,32 +365,32 @@ BigInt::BigInt(const uint32_t val)
 
 BigInt::BigInt(const uint64_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0)
+	, m_currentSize(0U)
 	, m_vals{}
 {
 	FromNum(val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const int val)
-	: m_sign(val < 0 ? Sign::NEG : Sign::POS)
-	, m_currentSize(0)
+	: m_sign(val < 0U ? Sign::NEG : Sign::POS)
+	, m_currentSize(0U)
 	, m_vals{}
 {
-	FromNum(val < 0 ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
+	FromNum(val < 0U ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const int64_t val)
-	: m_sign(val < 0 ? Sign::NEG : Sign::POS)
+	: m_sign(val < 0U ? Sign::NEG : Sign::POS)
+	, m_currentSize(0U)
 	, m_vals{}
-	, m_currentSize(0)
 {
 	FromNum(val < 0 ? uint64_t(-val) : (uint64_t)val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const char* input)
 	: m_sign(Sign::POS)
+	, m_currentSize(0U)
 	, m_vals{}
-	, m_currentSize(0)
 {
 	ParseStrInput(input);
 }
@@ -452,7 +415,7 @@ BigInt BigInt::operator+(const BigInt& other) const
 		if (c == Comparison::EQUAL)
 		{
 			// Result is always zero
-			return BigInt(0);
+			return BigInt(0U);
 		}
 		else
 		{
@@ -563,7 +526,7 @@ BigInt BigInt::operator%(const BigInt& other) const
 
 BigInt BigInt::operator/(const BigInt& other) const
 {
-	uint64_t base = 0;
+	uint64_t base = 0U;
 	if (other.IsZero())
 	{
 		throw std::invalid_argument("Division by zero");
@@ -594,7 +557,7 @@ BigInt BigInt::operator/(const BigInt& other) const
 
 BigInt BigInt::operator*(const BigInt& other) const
 {
-	uint64_t base = 0;
+	uint64_t base = 0U;
 	if (IsZero() || other.IsZero())
 	{
 		return BigInt();
@@ -633,12 +596,12 @@ BigInt BigInt::operator*(const BigInt& other) const
 		res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
 		res.Resize(neededSize);
 
-		for (size_t i = 0; i < CurrentSize(); ++i)
+		for (size_t i = 0U; i < CurrentSize(); ++i)
 		{
-			for (size_t ii = 0; ii < other.CurrentSize(); ++ii)
+			for (size_t ii = 0U; ii < other.CurrentSize(); ++ii)
 			{
 #if defined(USE_64BIT_VALUES)
-				Base carry = 0;
+				Base carry = 0U;
 				const Base mul = _umul128(m_vals[i], other.m_vals[ii], &carry);
 				AddResult(&res.m_vals[i + ii], mul);
 				if (carry)
@@ -671,9 +634,9 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 
 	BigInt e = exp;
 	BigInt base = *this;
-	BigInt copy = BigInt(1);
+	BigInt copy = BigInt(1U);
 	copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
-	uint64_t shift = 0;
+	uint64_t shift = 0U;
 
 	Base tmpBuf[MAX_SIZE] = {};
 	Base* tmpBuffer = tmpBuf;
@@ -685,19 +648,19 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 		multiplied.m_sign = multiplied.IsPositive() == multiplier.IsPositive() ? Sign::POS : Sign::NEG;
 		multiplied.Resize(neededSize);
 
-		for (size_t i = 0; i < multiplied.CurrentSize(); ++i)
+		for (size_t i = 0U; i < multiplied.CurrentSize(); ++i)
 		{
-			for (size_t ii = 0; ii < multiplier.CurrentSize(); ++ii)
+			for (size_t ii = 0U; ii < multiplier.CurrentSize(); ++ii)
 			{
-				Base carry = 0;
+				Base carry = 0U;
 				const Base mul = _umul128(multiplied.m_vals[i], multiplier.m_vals[ii], &carry);
 				AddResult(&tmpBuffer[i + ii], mul);
 				if (carry)
-					AddResult(&tmpBuffer[i + ii + 1], carry);
+					AddResult(&tmpBuffer[i + ii + 1U], carry);
 			}
 		}
-		multiplied.CopyFromSrc(tmpBuffer, neededSize, 0);
-		memset(tmpBuffer, 0, sizeof(Base) * neededSize);
+		multiplied.CopyFromSrc(tmpBuffer, neededSize, 0U);
+		memset(tmpBuffer, 0U, sizeof(Base) * neededSize);
 		multiplied.CleanPreceedingZeroes();
 	};
 
@@ -726,7 +689,7 @@ BigInt BigInt::Pow(const BigInt& exp) const
 
 	BigInt e = exp;
 	BigInt base = *this;
-	BigInt copy = BigInt(1);
+	BigInt copy = BigInt(1U);
 	copy.m_sign = (IsPositive() || !exp.IsOdd()) ? Sign::POS : Sign::NEG;
 
 	while (!e.IsZero())
@@ -736,7 +699,7 @@ BigInt BigInt::Pow(const BigInt& exp) const
 			copy = copy * base;
 		}
 
-		e = e >> 1;
+		e = e >> 1U;
 		base = base * base;
 	}
 	return copy;
@@ -756,7 +719,7 @@ void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res = BigInt();
 		return;
 	}
-	else if (shift == 0)
+	else if (shift == 0U)
 	{
 		res = target;
 		return;
@@ -764,31 +727,31 @@ void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
 
 	// Inherits the sign from target
 	res.m_sign = target.m_sign;
-	memset(res.m_vals, 0, sizeof(Base) * res.m_currentSize);
+	memset(res.m_vals, 0U, sizeof(Base) * res.m_currentSize);
 
-	const uint64_t quot = (shift / (sizeof(Base) * 8));
-	const unsigned char rem = (shift % (sizeof(Base) * 8));
+	const uint64_t quot = (shift / BASE_BITS);
+	const unsigned char rem = (shift % (BASE_BITS));
 
-	if ((quot + target.CurrentSize() + (rem > 0 ? 1 : 0)) > MAX_SIZE)
+	if ((quot + target.CurrentSize() + (rem > 0U ? 1U : 0U)) > MAX_SIZE)
 	{
 		throw std::invalid_argument("Overflow detected");
 	}
-	else if (rem == 0)
+	else if (rem == 0U)
 	{
 		// Add elements by the given quotient
 		res.Resize(quot + target.CurrentSize());
 
 		// Simpler case, just add elements after added zeroes
-		res.CopyFromSrc(&target.m_vals[0], target.CurrentSize(), quot);
+		res.CopyFromSrc(&target.m_vals[0U], target.CurrentSize(), quot);
 		res.CleanPreceedingZeroes();
 	}
 	else if (rem % 8 == 0)
 	{
-		const auto bytesToShift = rem / 8;
+		const unsigned char bytesToShift = rem / 8U;
 		const auto currSize = target.CurrentSize();
 		res.Resize(quot + currSize + 1);
 
-		const void* src = &target.m_vals[0];
+		const void* src = &target.m_vals[0U];
 		void* dst = GetShiftedPtr(&res.m_vals[quot], bytesToShift);
 		auto count = currSize * sizeof(Base);
 		memcpy(dst, src, count);
@@ -797,22 +760,21 @@ void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
 	else
 	{
 		const auto currSize = target.CurrentSize();
-		res.Resize(quot + currSize + 1);
+		res.Resize(quot + currSize + 1U);
 
 		// As a optimization, do the "special cases" outside the for-loop
 		// It has a measurable impact on performance to _not_ have any if-conditions in the loop
-		res.m_vals[size_t(quot)] = __ll_lshift(target.m_vals[0], rem);
-		res.m_vals[currSize + size_t(quot)] = __shiftleft128(target.m_vals[currSize - 1], 0, rem);
+		res.m_vals[size_t(quot)] = __ll_lshift(target.m_vals[0U], rem);
+		res.m_vals[currSize + size_t(quot)] = __shiftleft128(target.m_vals[currSize - 1U], 0U, rem);
 
-		for (size_t i = 1; i < currSize; ++i)
+		for (size_t i = 1U; i < currSize; ++i)
 		{
-			res.m_vals[i + size_t(quot)] = __shiftleft128(target.m_vals[i - 1], target.m_vals[i], rem);
+			res.m_vals[i + size_t(quot)] = __shiftleft128(target.m_vals[i - 1U], target.m_vals[i], rem);
 		}
 
 		res.CleanPreceedingZeroes();
 	}
 }
-
 
 BigInt BigInt::operator>>(const uint64_t shift) const
 {
@@ -829,12 +791,12 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res = BigInt();
 		return;
 	}
-	else if (shift == 0)
+	else if (shift == 0U)
 	{
 		res = target;
 		return;
 	}
-	else if (shift >= (target.CurrentSize() * sizeof(Base) * 8))
+	else if (shift >= (target.CurrentSize() * BASE_BITS))
 	{
 		// A quick cursoly check if shift definately bigger than 'target'
 		// More detailed check is done by checking the actual bit-count if this check is passed
@@ -845,8 +807,8 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 	// Inherits the sign from 'target'
 	res.m_sign = target.m_sign;
 
-	const auto quot = (shift / (sizeof(Base) * 8));
-	const unsigned char rem = (shift % (sizeof(Base) * 8));
+	const auto quot = (shift / (BASE_BITS));
+	const unsigned char rem = (shift % (BASE_BITS));
 
 	const uint64_t width = target.GetBitWidth();
 	if (shift >= width)
@@ -854,22 +816,22 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res = BigInt();
 		return;
 	}
-	else if (rem == 0)
+	else if (rem == 0U)
 	{
 		// Simpler case, just drop elements from the start
 
 		res.Resize(target.CurrentSize() - quot);
-		res.CopyFromSrc(&target.m_vals[quot], target.CurrentSize() - quot, 0);
+		res.CopyFromSrc(&target.m_vals[quot], target.CurrentSize() - quot, 0U);
 		res.CleanPreceedingZeroes();
 	}
-	else if (rem % 8 == 0)
+	else if (rem % 8U == 0U)
 	{
-		const auto bytesToShift = rem / 8;
+		const unsigned char bytesToShift = rem / 8U;
 		const auto currSize = target.CurrentSize();
 		res.Resize(currSize - quot);
 
 		const void* src = GetShiftedPtr(&target.m_vals[quot], bytesToShift);
-		void* dst = &res.m_vals[0];
+		void* dst = &res.m_vals[0U];
 		auto count = (currSize * sizeof(Base)) - bytesToShift;
 		memcpy(dst, src, count);
 		res.CleanPreceedingZeroes();
@@ -881,11 +843,11 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		const auto maxIndex = target.CurrentSize();
 		for (size_t i = size_t(quot); i < maxIndex; ++i)
 		{
-			res.m_vals[i - size_t(quot)] = __shiftright128(target.m_vals[i], target.m_vals[i + 1], rem);
+			res.m_vals[i - size_t(quot)] = __shiftright128(target.m_vals[i], target.m_vals[i + 1U], rem);
 		}
 
 		// Shift amount has already been checked -> Cannot overindex
-		res.m_vals[0] |= __ull_rshift(target.m_vals[quot], rem);
+		res.m_vals[0U] |= __ull_rshift(target.m_vals[quot], rem);
 		res.CleanPreceedingZeroes();
 	}
 }
@@ -941,25 +903,28 @@ std::string BigInt::ToHex() const
 
 	ret.append("0x");
 	bool nonZeroAdded = false;
-	for (size_t i = CurrentSize() - 1;; --i)
+	for (size_t i = CurrentSize() - 1U;; --i)
 	{
-		for (int nibbleNro = (sizeof(Base) * 2) - 1; nibbleNro >= 0; --nibbleNro)
+		for (auto nibbleNro = (sizeof(Base) * 2U) - 1U;; --nibbleNro)
 		{
 			const auto mask = (Base(0xF) << (nibbleNro * 4));
-			const auto nibble = Base(m_vals[i] & mask) >> (nibbleNro * 4);
-			if (!nonZeroAdded && nibble == 0)
+			const auto nibble = Base(m_vals[i] & mask) >> (nibbleNro * 4U);
+			if (!nonZeroAdded && nibble == 0U)
 			{
 				continue;
 			}
 			nonZeroAdded = true;
-			ret += NumToChar(char(nibble));
+			ret += NumToChar(nibble > UINT8_MAX ? UINT8_MAX : uint8_t(nibble), true);
+
+			if (nibbleNro == 0U)
+				break;
 		}
-		if (i == 0)
+		if (i == 0U)
 			break;
 	}
 	if (!nonZeroAdded)
 	{
-		ret += NumToChar(0);
+		ret += NumToChar(0U, true);
 	}
 	return ret;
 }
@@ -975,28 +940,28 @@ std::string BigInt::ToDec() const
 	std::string hex = ToHex();
 	if (!IsPositive())
 	{
-		hex.erase(hex.begin(), hex.begin() + 3);
+		hex.erase(hex.begin(), hex.begin() + 3U);
 	}
 	else
 	{
-		hex.erase(hex.begin(), hex.begin() + 2);
+		hex.erase(hex.begin(), hex.begin() + 2U);
 	}
 
-	std::vector<int> dec;
+	std::vector<unsigned int> dec;
 	for (const char c : hex)
 	{
 		unsigned int carry = CharToNum(c, true);
 
-		for (auto i = 0; i < dec.size(); ++i)
+		for (auto i = 0U; i < dec.size(); ++i)
 		{
-			int val = dec[i] * 16 + carry;
-			dec[i] = val % 10;
-			carry = val / 10;
+			auto val = dec[i] * 16U + carry;
+			dec[i] = val % 10U;
+			carry = val / 10U;
 		}
-		while (carry > 0)
+		while (carry > 0U)
 		{
-			dec.push_back(carry % 10);
-			carry /= 10;
+			dec.push_back(carry % 10U);
+			carry /= 10U;
 		}
 	}
 
@@ -1007,7 +972,8 @@ std::string BigInt::ToDec() const
 	}
 	for (auto iter = dec.rbegin(); iter != dec.rend(); ++iter)
 	{
-		ret += NumToChar(*iter);
+		const auto c = *iter;
+		ret += NumToChar(c > UINT8_MAX ? UINT8_MAX : uint8_t(c), false);
 	}
 
 	return ret;
@@ -1017,17 +983,17 @@ std::string BigInt::ToRawData() const
 {
 	std::string ret;
 
-	for (size_t i = 0; i < CurrentSize(); ++i)
+	for (size_t i = 0U; i < CurrentSize(); ++i)
 	{
-		for (size_t charPos = 0; charPos < sizeof(Base); ++charPos)
+		for (size_t charPos = 0U; charPos < sizeof(Base); ++charPos)
 		{
-			const Base mask = (Base(0xFF) << (charPos * 8));
-			const auto shift = (charPos * 8);
+			const Base mask = (Base(0xFF) << (charPos * 8U));
+			const auto shift = (charPos * 8U);
 			Base c = Base(m_vals[i] & mask);
 			c = (c >> shift);
 
-			if (i == (CurrentSize() - 1)
-				&& c == 0)
+			if (i == (CurrentSize() - 1U)
+				&& c == 0U)
 			{
 				// The last element may contain null's, depending on source data and sizeof(Base)
 				continue;
@@ -1041,9 +1007,9 @@ std::string BigInt::ToRawData() const
 
 bool BigInt::IsZero() const
 {
-	if (CurrentSize() == 0
-		|| (CurrentSize() == 1
-			&& m_vals[0] == 0))
+	if (CurrentSize() == 0U
+		|| (CurrentSize() == 1U
+			&& m_vals[0U] == 0))
 	{
 		return true;
 	}
@@ -1052,7 +1018,7 @@ bool BigInt::IsZero() const
 
 bool BigInt::IsOne() const
 {
-	return (CurrentSize() == 1 && m_vals[0] == 1);
+	return (CurrentSize() == 1U && m_vals[0U] == 1U);
 }
 
 bool BigInt::IsOdd() const
@@ -1061,7 +1027,7 @@ bool BigInt::IsOdd() const
 	{
 		return false;
 	}
-	return (m_vals[0] & 1) == 1;
+	return (m_vals[0U] & 1U) == 1U;
 }
 
 bool BigInt::IsPositive() const
@@ -1073,7 +1039,7 @@ BigInt BigInt::GreatestCommonDivisor(const BigInt& other, uint64_t& iters) const
 {
 	BigInt copy(*this);
 	BigInt div(other);
-	while (1)
+	while (true)
 	{
 		++iters;
 		if (div.IsZero())
@@ -1115,9 +1081,9 @@ void BigInt::ExtendedEuclididan(const BigInt& b, BigInt& gcd, BigInt& x, BigInt&
 	BigInt a(*this);
 
 	BigInt s(0);
-	BigInt old_s(1);
-	BigInt t(1);
-	BigInt old_t(0);
+	BigInt old_s(1U);
+	BigInt t(1U);
+	BigInt old_t(0U);
 	BigInt r(b);
 	BigInt old_r(a);
 
@@ -1167,10 +1133,10 @@ bool BigInt::IsPrimeNumber() const
 {
 	if (IsZero() || !IsOdd())
 		return false;
-	else if (*this == 3)
+	else if (*this == 3U)
 		return true;
 
-	std::atomic<uint8_t> iters(0);
+	std::atomic<uint8_t> iters(0U);
 	bool isPrime = true;
 
 #ifdef USE_THREADS
@@ -1187,17 +1153,17 @@ void BigInt::IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pIsPrime) cons
 	CryptoUtils::RandomGenerator rand_gen;
 
 	const BigInt& n = *this;
-	const BigInt n_1 = *this - 1;
-	const BigInt n_3 = *this - 3;
+	const BigInt n_1 = *this - 1U;
+	const BigInt n_3 = *this - 3U;
 	const size_t r = n_1.GetLSB();
-	const BigInt d = n_1 / BigInt(2).Pow(r);
+	const BigInt d = n_1 / BigInt(2U).Pow(r);
 
 	auto InnerLoop = [r, &n_1, &n](BigInt& x)
 	{
 		// Repeat r - 1 times
-		for (auto ii = 1; ii < r; ++ii)
+		for (auto ii = 1U; ii < r; ++ii)
 		{
-			x = x.PowMod(2, n);
+			x = x.PowMod(2U, n);
 			if (x == n_1)
 			{
 				return true;
@@ -1214,10 +1180,10 @@ void BigInt::IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pIsPrime) cons
 		BigInt a;
 
 		// Pick a size for 'a' between one and CurrentSize of this
-		auto size = (rand_gen.Random64() % CurrentSize()) + 1;
+		auto size = (rand_gen.Random64() % CurrentSize()) + 1U;
 		a.Resize(size);
 		rand_gen.RandomData(a.m_vals, a.CurrentSize());
-		a = (a % n_3) + 2;
+		a = (a % n_3) + 2U;
 
 		BigInt x = a.PowMod(d, *this);
 		if (x.IsOne() || x == n_1)
@@ -1268,7 +1234,7 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 
 		while (divisor.CompareWithoutSign(rem) == Comparison::GREATER)
 		{
-			divisor = divisor >> 1;
+			divisor = divisor >> 1U;
 			--shift;
 		}
 
@@ -1283,54 +1249,54 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 
 void BigInt::SetBit(const uint64_t bitNo)
 {
-	const uint64_t elementNo = (bitNo / (sizeof(Base) * 8));
-	const size_t bitNoInElement = (bitNo % (sizeof(Base) * 8));
+	const uint64_t elementNo = (bitNo / (BASE_BITS));
+	const size_t bitNoInElement = (bitNo % (BASE_BITS));
 
 	if (elementNo >= CurrentSize())
 	{
 		// Size needs to be increased
 		// elementNo is an index starting from 0 -> add 1
-		Resize(elementNo + 1);
+		Resize(elementNo + 1U);
 	}
 
-	m_vals[size_t(elementNo)] |= (Base(1) << bitNoInElement);
+	m_vals[size_t(elementNo)] |= (Base(1U) << bitNoInElement);
 }
 
 uint64_t BigInt::GetBitWidth() const
 {
 	if (!IsZero())
 	{
-		uint64_t count = (CurrentSize() - 1) * (sizeof(Base) * 8);
-		unsigned long index = 0;
-		if (_BitScanReverse64(&index, m_vals[CurrentSize() - 1]))
+		uint64_t count = (CurrentSize() - 1U) * (BASE_BITS);
+		unsigned long index = 0U;
+		if (_BitScanReverse64(&index, m_vals[CurrentSize() - 1U]))
 		{
-			count += (1 + index);
+			count += (1U + index);
 		}
 		return count;
 	}
-	return 0;
+	return 0U;
 }
 
 uint64_t BigInt::GetByteWidth() const
 {
-	uint64_t bits = GetBitWidth();
-	return (bits / 8) + ((bits % 8) > 0 ? 1 : 0);
+	const uint64_t bits = GetBitWidth();
+	return (bits / 8U) + ((bits % 8U) > 0U ? 1U : 0U);
 }
 
 bool BigInt::IsBase2(uint64_t& base) const
 {
-	uint64_t t = 0;
+	uint64_t t = 0U;
 	if (IsZero())
 	{
 		return false;
 	}
 
 	bool bitFound = false;
-	for (size_t i = 0; i < CurrentSize(); ++i)
+	for (size_t i = 0U; i < CurrentSize(); ++i)
 	{
 		const Base v = m_vals[i];
-		unsigned long f = 0;
-		unsigned long r = 0;
+		unsigned long f = 0U;
+		unsigned long r = 0U;
 		if (_BitScanForward64(&f, v)
 			&& _BitScanReverse64(&r, v))
 		{
@@ -1344,26 +1310,31 @@ bool BigInt::IsBase2(uint64_t& base) const
 		else if (!bitFound)
 		{
 			// Current value has not bit (i.e. is zero)
-			t += sizeof(Base) * 8;
+			t += BASE_BITS;
 		}
 	}
-	base = bitFound ? t : 0;
+	base = bitFound ? t : 0U;
 	return bitFound;
 }
 
 void BigInt::SetZero()
 {
 	m_sign = Sign::POS;
-	memset(m_vals, 0, m_currentSize * sizeof(Base));
-	m_currentSize = 1;
-	m_vals[0] = 0;
+	memset(m_vals, 0U, m_currentSize * sizeof(Base));
+	m_currentSize = 1U;
+	m_vals[0U] = 0U;
+}
+
+size_t BigInt::CurrentSize() const
+{
+	return m_currentSize;
 }
 
 void BigInt::CleanPreceedingZeroes()
 {
-	for (auto i = CurrentSize() - 1; i > 0; --i)
+	for (auto i = CurrentSize() - 1U; i > 0U; --i)
 	{
-		if (m_vals[i] == 0)
+		if (m_vals[i] == 0U)
 		{
 			m_currentSize--;
 		}
@@ -1377,10 +1348,10 @@ void BigInt::CleanPreceedingZeroes()
 void BigInt::FromNum(const uint64_t val, const uint8_t size)
 {
 	const size_t chunks = size / sizeof(Base);
-	Resize(chunks == 0 ? 1 : chunks);
-	for (size_t i = 0; i < CurrentSize(); ++i)
+	Resize(chunks == 0U ? 1U : chunks);
+	for (size_t i = 0U; i < CurrentSize(); ++i)
 	{
-		const auto shift = sizeof(Base) * 8 * i;
+		const auto shift = BASE_BITS * i;
 		m_vals[i] = Base(val >> shift);
 	}
 	CleanPreceedingZeroes();
@@ -1389,21 +1360,21 @@ void BigInt::FromNum(const uint64_t val, const uint8_t size)
 BigInt BigInt::SumWithoutSign(const BigInt& other) const
 {
 	BigInt copy;
-	const auto s = std::max(other.m_currentSize, m_currentSize) + 1;
+	const auto s = std::max(other.m_currentSize, m_currentSize) + 1U;
 
 	copy.Resize(s);
 	const size_t size = copy.CurrentSize();
 	const size_t size2 = other.CurrentSize();
 
-	for (size_t i = 0; i < size; ++i)
+	for (size_t i = 0U; i < size; ++i)
 	{
 #if defined(USE_64BIT_VALUES)
-		const Base val1 = i < size ? m_vals[i] : 0;
-		const Base val2 = i < size2 ? other.m_vals[i] : 0;
+		const Base val1 = i < size ? m_vals[i] : 0U;
+		const Base val2 = i < size2 ? other.m_vals[i] : 0U;
 
-		Base sum = 0;
-		if (_addcarry_u64(0, val1, val2, &sum))
-			AddResult(&copy.m_vals[i + 1], 1);
+		Base sum = 0U;
+		if (_addcarry_u64(0U, val1, val2, &sum))
+			AddResult(&copy.m_vals[i + 1U], 1U);
 		AddResult(&copy.m_vals[i], sum);
 
 #else
@@ -1422,10 +1393,10 @@ BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 {
 	BigInt copy(*this);
 	const size_t size = std::min(CurrentSize(), other.CurrentSize());
-	for (size_t i = 0; i < size; ++i)
+	for (size_t i = 0U; i < size; ++i)
 	{
 		const Base val = other.m_vals[i];
-		SubResult(&copy.m_vals[i], val, 0);
+		SubResult(&copy.m_vals[i], val, 0U);
 	}
 	copy.CleanPreceedingZeroes();
 	return copy;
@@ -1461,7 +1432,7 @@ void BigInt::Mod(BigInt& rem, const BigInt& div)
 
 		while (divisor.CompareWithoutSign(rem) == Comparison::GREATER)
 		{
-			divisor = divisor >> 1;
+			divisor = divisor >> 1U;
 			--shift;
 		}
 
@@ -1472,13 +1443,13 @@ void BigInt::Mod(BigInt& rem, const BigInt& div)
 void BigInt::SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend)
 {
 	const size_t size = std::max(minuendRes.CurrentSize(), subtrahend.CurrentSize());
-	for (size_t i = size - 1;;)
+	for (size_t i = size - 1U;;)
 	{
-		if (_subborrow_u64(0, minuendRes.m_vals[i], subtrahend.m_vals[i], &minuendRes.m_vals[i]))
+		if (_subborrow_u64(0U, minuendRes.m_vals[i], subtrahend.m_vals[i], &minuendRes.m_vals[i]))
 		{
-			for (auto ii = i + 1; _subborrow_u64(1, minuendRes.m_vals[ii], 0, &minuendRes.m_vals[ii]); ++ii) {}
+			for (auto ii = i + 1U; _subborrow_u64(1, minuendRes.m_vals[ii], 0U, &minuendRes.m_vals[ii]); ++ii) {}
 		}
-		if (i != 0)
+		if (i != 0U)
 			--i;
 		else
 			break;
@@ -1511,7 +1482,7 @@ BigInt::Comparison BigInt::CompareWithoutSign(const BigInt& other) const
 	if (CurrentSize() == other.CurrentSize())
 	{
 		// Sizes are equal
-		for (size_t i = CurrentSize() - 1;; --i)
+		for (size_t i = CurrentSize() - 1U;; --i)
 		{
 			if (m_vals[i] > other.m_vals[i])
 			{
@@ -1525,7 +1496,7 @@ BigInt::Comparison BigInt::CompareWithoutSign(const BigInt& other) const
 			}
 			// Current elements are equal, continue to the next
 
-			if (i == 0)
+			if (i == 0U)
 			{
 				// Values are equal
 				res = Comparison::EQUAL;
@@ -1544,7 +1515,7 @@ BigInt::Comparison BigInt::CompareWithoutSign(const BigInt& other) const
 
 void BigInt::Resize(const size_t size)
 {
-	static size_t maxSize = 0;
+	static size_t maxSize = 0U;
 	if (size > MAX_SIZE)
 	{
 		throw std::invalid_argument("Overflow detected");
@@ -1562,27 +1533,31 @@ void BigInt::Resize(const size_t size)
 
 BigInt::Base BigInt::MostSignificant() const
 {
-	Base ret = 0;
+	Base ret = 0U;
 	if (IsZero())
 	{
 		return ret;
 	}
-	else if (m_currentSize == 1)
+	else if (m_currentSize == 1U)
 	{
-		unsigned long index = 0;
-		if (_BitScanReverse64(&index, m_vals[0]))
+		unsigned long index = 0U;
+		if (_BitScanReverse64(&index, m_vals[0U]))
 		{
-			const auto shift = int((sizeof(Base) * 8) - 1 - index);
-			ret = __ll_lshift(m_vals[0], shift);
+			const auto shift = int((BASE_BITS) - 1U - index);
+			ret = __ll_lshift(m_vals[0U], shift);
 		}
 	}
-	else
+	else if (m_currentSize > 1U)
 	{
-		unsigned long index = 0;
-		if (_BitScanReverse64(&index, m_vals[m_currentSize - 1]))
+		unsigned long index = 0U;
+		if (_BitScanReverse64(&index, m_vals[m_currentSize - 1U]))
 		{
-			const auto shift = int((sizeof(Base) * 8) - 1 - index);
-			ret = __shiftleft128(m_vals[m_currentSize - 2], m_vals[m_currentSize - 1], shift);
+			// Shift values left so that the highest bit of Base is MSB
+
+			// index is a number from [0...63] and Base is 64 bit
+			// -> Result cannot be negative or
+			const auto shift =  unsigned char(BASE_BITS - 1U - unsigned char(index));
+			ret = __shiftleft128(m_vals[m_currentSize - 2U], m_vals[m_currentSize - 1U], shift);
 		}
 	}
 	return ret;
@@ -1590,13 +1565,13 @@ BigInt::Base BigInt::MostSignificant() const
 
 size_t BigInt::GetLSB() const
 {
-	size_t ret = 0;
-	for (auto i = 0; i < CurrentSize(); ++i)
+	size_t ret = 0U;
+	for (auto i = 0U; i < CurrentSize(); ++i)
 	{
-		unsigned long index = 0;
+		unsigned long index = 0U;
 		if (_BitScanForward64(&index, m_vals[i]))
 		{
-			ret = index + (sizeof(Base) * 8 * i);
+			ret = index + (BASE_BITS * i);
 			break;
 		}
 	}

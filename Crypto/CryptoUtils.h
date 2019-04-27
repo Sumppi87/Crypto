@@ -37,6 +37,8 @@ public:
 	private:
 		std::mt19937_64 m_gen;
 
+		RandomGenerator(const RandomGenerator&) = delete;
+		RandomGenerator& operator=(const RandomGenerator&) = delete;
 		RandomGenerator(const RandomGenerator&&) = delete;
 		RandomGenerator& operator=(const RandomGenerator&&) = delete;
 	};
