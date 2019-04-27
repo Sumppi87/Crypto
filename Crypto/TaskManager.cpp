@@ -15,7 +15,6 @@ void Task::Execute()
 {
 	std::unique_lock lock(m_lock);
 	m_state = State::RUNNING;
-	lock.unlock();
 
 	if (m_func)
 		m_func();
