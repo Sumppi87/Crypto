@@ -350,6 +350,30 @@ int main(int argc, char** argv)
 	}
 	else if (std::string(argv[1]) == "decrypt")
 		return DecryptData("test.cpp.enc", "test_decrypted.cpp");
+	else if (std::string(argv[1]) == "test")
+	{
+		Crypto::KeySize keySize;
+		if (GetKeySize(argv[2], keySize))
+		{
+			BigInt sum;
+			for (auto i = 0; i < 25; ++i)
+			{
+				Crypto::AsymmetricKeys keys;
+
+				const auto start = std::chrono::high_resolution_clock::now();
+				Crypto::CreateAsymmetricKeys(keySize, &keys);
+				const auto end = std::chrono::high_resolution_clock::now();
+				const auto keyGen_start = std::chrono::high_resolution_clock::now();
+				const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+				std::cout << "Key generation took: " << duration << " ms" << std::endl;
+
+				sum = sum + duration;
+				Crypto::DeleteAsymmetricKeys(&keys);
+			}
+			std::cout << "Key generation took (avg) : " << (sum / 25).ToDec() << " ms" << std::endl;
+		}
+	}
 	else
 		std::cerr << "Error, unknown command" << std::endl;
 	return -1;

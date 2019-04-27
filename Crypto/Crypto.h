@@ -103,7 +103,7 @@ public:
 	// !\param[out] pEncryptedBytes How many encrypted bytes was written to the buffer
 	// !\return CryptoRet::OK if data was succesfully encrypted
 	// !\note Function supports in-place encryption: input.pData == output.pData
-	//        However, multi-threaded encryption is not supported if in-place encryption is used
+	//        However, multi-threaded encryption is not supported with in-place encryption
 	//        When in-place encryption is not used, buffers of input and output shall not overlap
 	// !\details Output buffer must be sufficiently large for encrypted data.
 	//           Needed buffer size can be calculated with keysize and data size of the input
@@ -119,7 +119,7 @@ public:
 	// !\param[out] pDecryptedBytes How many decrypted bytes was written to the buffer
 	// !\return CryptoRet::OK if data was succesfully decrypted
 	// !\note Function supports in-place decryption: input.pData == output.pData
-	//        However, multi-threaded decryption is not supported if in-place decryption is used
+	//        However, multi-threaded decryption is not supported when in-place decryption is used
 	//        When in-place decryption is not used, buffers of input and output shall not overlap
 	// !\details Output buffer must be sufficiently large for decrypted data.
 	//           Needed buffer size can be calculated with keysize and data size of the input
