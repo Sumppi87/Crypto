@@ -114,50 +114,6 @@ namespace
 		}
 	}
 
-#ifdef TEST
-	inline unsigned __int64 mulhi(unsigned __int64 a, unsigned __int64 b)
-	{
-		uint64_t a_lo = (uint32_t)a;
-		uint64_t a_hi = a >> 32;
-		uint64_t b_lo = (uint32_t)b;
-		uint64_t b_hi = b >> 32;
-
-		uint64_t a_x_b_hi = a_hi * b_hi;
-		uint64_t a_x_b_mid = a_hi * b_lo;
-		uint64_t b_x_a_mid = b_hi * a_lo;
-		uint64_t a_x_b_lo = a_lo * b_lo;
-
-		uint64_t carry_bit = ((uint64_t)(uint32_t)a_x_b_mid +
-			(uint64_t)(uint32_t)b_x_a_mid +
-			(a_x_b_lo >> 32)) >> 32;
-
-		uint64_t multhi = a_x_b_hi +
-			(a_x_b_mid >> 32) + (b_x_a_mid >> 32) +
-			carry_bit;
-		return multhi;
-	}
-
-	unsigned __int64 _umul128(unsigned __int64 a, unsigned __int64 b, unsigned __int64* pHigh)
-	{
-		*pHigh = mulhi(a, b);
-		return a * b;
-	}
-
-	unsigned char _addcarry_u64(unsigned char c_in, unsigned __int64 a, unsigned __int64 b, unsigned __int64 *sum_out)
-	{
-		const uint32_t a_lo = uint32_t(a);
-		const uint32_t a_hi = uint32_t(a >> 32);
-		const uint32_t b_lo = uint32_t(b);
-		const uint32_t b_hi = uint32_t(b >> 32);
-		const uint64_t lo = a_lo + b_lo + (c_in > 0 ? 1 : 0);
-		const uint64_t hi = a_hi + b_hi;
-
-		*sum_out = ((hi << 32) | lo);
-
-		return (hi >> 32) > 0 ? unsigned char(1) : unsigned char(0);
-	}
-#endif
-
 #if defined (USE_64BIT_VALUES)
 	inline void AddResult(uint64_t* src, const uint64_t val)
 	{

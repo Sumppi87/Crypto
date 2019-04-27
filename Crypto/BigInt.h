@@ -39,7 +39,7 @@ public:
 	BigInt operator/(const BigInt& other) const;
 	BigInt operator*(const BigInt& other) const;
 
-	BigInt PowMod(const BigInt& exp, const BigInt& mod) const;
+	inline BigInt PowMod(const BigInt& exp, const BigInt& mod) const;
 
 	BigInt Pow(const BigInt& exp) const;
 
@@ -65,13 +65,13 @@ public:
 
 	std::string ToRawData() const;
 
-	bool IsZero() const;
+	inline bool IsZero() const;
 
 	bool IsOne() const;
 
-	bool IsOdd() const;
+	inline bool IsOdd() const;
 
-	bool IsPositive() const;
+	inline bool IsPositive() const;
 
 	BigInt GreatestCommonDivisor(const BigInt& other, uint64_t& iters) const;
 
@@ -83,24 +83,21 @@ public:
 
 	void SetBit(const uint64_t bitNo);
 
-	uint64_t GetBitWidth() const;
+	inline uint64_t GetBitWidth() const;
 	uint64_t GetByteWidth() const;
 
 	bool IsBase2(uint64_t& base) const;
 
 	void SetZero();
 
-	inline size_t CurrentSize() const
-	{
-		return m_currentSize;
-	}
+	inline size_t CurrentSize() const;
 
 private:
 	void IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pStop) const;
 
 	void Div(const BigInt& div, BigInt& rem, BigInt* pQuot = nullptr) const;
 
-	void CleanPreceedingZeroes();
+	inline void CleanPreceedingZeroes();
 
 	void FromNum(const uint64_t val, const uint8_t size);
 
@@ -109,10 +106,10 @@ private:
 	BigInt SubstractWithoutSign(const BigInt& other) const;
 
 	// In-place helper functions
-	static void Mod(BigInt& rem, const BigInt& div);
-	static void SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend);
-	static void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
-	static void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);
+	static inline void Mod(BigInt& rem, const BigInt& div);
+	static inline void SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend);
+	static inline void LeftShift(BigInt& res, const BigInt& target, const uint64_t shift);
+	static inline void RightShift(BigInt& res, const BigInt& target, const uint64_t shift);
 
 	enum class Comparison
 	{
@@ -127,17 +124,17 @@ private:
 	// If both are equal, function return Comparison::EQUAL
 	// If *this > other, function returns Comparison::GREATER
 	// Comparison::LESSER otherwise
-	Comparison CompareWithoutSign(const BigInt& other) const;
+	inline Comparison CompareWithoutSign(const BigInt& other) const;
 
-	void Resize(const size_t size);
+	inline void Resize(const size_t size);
 
 	// Returns a value starting from MSB (of the whole BigInt)
-	Base MostSignificant() const;
+	inline Base MostSignificant() const;
 
 	// Gets the bitnumber of least significant bit
 	size_t GetLSB() const;
 
-	void CopyFromSrc(const void* src,
+	inline void CopyFromSrc(const void* src,
 		const size_t count,
 		const size_t copyToIndex);
 
