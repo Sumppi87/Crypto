@@ -152,8 +152,31 @@ private:
 	};
 
 	Sign m_sign;
-	size_t m_currentSize;
-	Base m_vals[MAX_SIZE];
 
+	struct ValueContainer
+	{
+		ValueContainer();
+
+		void SetZero();
+
+		inline void CleanPreceedingZeroes();
+
+		inline Base& operator[](const size_t index);
+		inline const Base& operator[](const size_t index) const;
+
+		inline operator void*();
+		inline operator const void*() const;
+
+		operator char*();
+		operator const char*() const;
+
+		inline operator uint64_t*();
+		inline operator const uint64_t*() const;
+
+		Base m_vals[MAX_SIZE];
+		size_t m_currentSize;
+	};
+
+	ValueContainer m_vals;
 	friend class CryptoUtils;
 };

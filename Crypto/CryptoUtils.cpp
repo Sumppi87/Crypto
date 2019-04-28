@@ -237,7 +237,7 @@ Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	BigInt data;
 	data.Resize(encryptedBlockSize / sizeof(uint64_t));
 	memcpy(data.m_vals, &input.size, BLOCK_SIZE_BYTES);
-	char* dst = (reinterpret_cast<char*>(data.m_vals) + BLOCK_SIZE_BYTES);
+	char* dst = (char*)data.m_vals + BLOCK_SIZE_BYTES;
 	memcpy(dst, input.pData, input.size);
 
 	if (input.size < decryptedBlockSize)
@@ -280,7 +280,7 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 
 	BigInt data;
 	data.Resize(encryptedBlockSize / sizeof(uint64_t));
-	char* dst = reinterpret_cast<char*>(data.m_vals);
+	char* dst = data.m_vals;
 	memcpy(dst, input.pData, input.size);
 
 #ifdef _DEBUG
@@ -292,7 +292,7 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 #endif
 
 	uint16_t blockSize = 0U;
-	const char* decryptedDst = reinterpret_cast<const char*>(decrypted.m_vals);
+	const char* decryptedDst = (const char*)decrypted.m_vals;
 	memcpy(&blockSize, decryptedDst, BLOCK_SIZE_BYTES);
 
 	if (blockSize == 0U || blockSize > decryptedBlockSize)
@@ -338,7 +338,7 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 	else
 	{
 		// Generate random data
-		RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
+		RAND.RandomData((BigInt::Base*)randPrime.m_vals, randPrime.CurrentSize());
 		if (!randPrime.IsOdd())
 			randPrime = randPrime + 1U;
 
@@ -376,7 +376,7 @@ BigInt CryptoUtils::GenerateRandomPrime(const size_t bits)
 	randPrime.Resize(blocks > 0U ? blocks : 1U);
 
 	// Generate random data
-	RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
+	RAND.RandomData((uint64_t*)randPrime.m_vals, randPrime.CurrentSize());
 	if (!randPrime.IsOdd())
 		randPrime = randPrime + 1U;
 
