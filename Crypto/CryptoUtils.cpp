@@ -25,7 +25,7 @@ namespace
 		return false;
 	}
 
-	bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
+	inline bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
 	{
 		auto num = n.GetByteWidth() * 8U;
 		bool retVal = true;
@@ -59,7 +59,7 @@ namespace
 		return retVal;
 	}
 
-	uint16_t KeyBytes(const Crypto::KeySize keySize)
+	inline uint16_t KeyBytes(const Crypto::KeySize keySize)
 	{
 		uint16_t block = 0U;
 		switch (keySize)
@@ -91,13 +91,13 @@ namespace
 		return block;
 	}
 
-	bool operator>(const BigInt& num, const Crypto::KeySize keysize)
+	inline bool operator>(const BigInt& num, const Crypto::KeySize keysize)
 	{
 		const auto keyBytes = KeyBytes(keysize);
 		return num.GetBitWidth() > (keyBytes * 8U);
 	}
 
-	bool operator!=(const BigInt& num, const Crypto::KeySize keysize)
+	inline bool operator!=(const BigInt& num, const Crypto::KeySize keysize)
 	{
 		const auto keyBytes = KeyBytes(keysize);
 		return num.GetBitWidth() != (keyBytes * 8U);
@@ -164,7 +164,7 @@ CryptoUtils::RandomGenerator* CryptoUtils::GetRand()
 	return &RAND;
 }
 
-Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PublicKey* key,
+Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PublicKey key,
 	const Crypto::DataOut out,
 	uint16_t* pPubBytesWritten)
 {
@@ -192,7 +192,7 @@ Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PublicKey* key,
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PrivateKey* key,
+Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PrivateKey key,
 	const Crypto::DataOut out,
 	uint16_t* pPrivBytesWritten)
 {
@@ -220,14 +220,14 @@ Crypto::CryptoRet CryptoUtils::WriteKeyToBuffer(const Crypto::PrivateKey* key,
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
+Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey key,
 	const Crypto::DataIn input,
 	const Crypto::DataOut out,
 	uint64_t* pEncryptedBytes)
 {
 	uint16_t encryptedBlockSize = 0U;
 	uint16_t decryptedBlockSize = 0U;
-	BlockSize(key.keySize, &decryptedBlockSize, &encryptedBlockSize);
+	BlockSize(key->keySize, &decryptedBlockSize, &encryptedBlockSize);
 	if (input.size > decryptedBlockSize)
 	{
 		_ASSERT(0);
@@ -252,7 +252,7 @@ Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	std::cout << "Encrypting Block: " << data.ToHex() << std::endl;
 #endif
 
-	BigInt encrypted = data.PowMod(key.e, key.n);
+	BigInt encrypted = data.PowMod(key->e, key->n);
 #ifdef _DEBUG
 	std::cout << "Encrypted Block: " << encrypted.ToHex() << std::endl;
 #endif
@@ -264,14 +264,14 @@ Crypto::CryptoRet CryptoUtils::EncryptBlock(const Crypto::PublicKey& key,
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
+Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey key,
 	const Crypto::DataIn input,
 	const Crypto::DataOut out,
 	uint64_t* pDecryptedBytes)
 {
 	uint16_t encryptedBlockSize = 0U;
 	uint16_t decryptedBlockSize = 0U;
-	BlockSize(key.keySize, &decryptedBlockSize, &encryptedBlockSize);
+	BlockSize(key->keySize, &decryptedBlockSize, &encryptedBlockSize);
 	if (input.size > encryptedBlockSize)
 	{
 		_ASSERT(0);
@@ -285,10 +285,10 @@ Crypto::CryptoRet CryptoUtils::DecryptBlock(const Crypto::PrivateKey& key,
 
 #ifdef _DEBUG
 	std::cout << "Decrypting Block: " << data.ToHex() << std::endl;
-	const BigInt decrypted = data.PowMod(key.d, key.n);
+	const BigInt decrypted = data.PowMod(key->d, key->n);
 	std::cout << "Decrypted Block: " << decrypted.ToHex() << std::endl;
 #else
-	const BigInt decrypted = data.PowMod(key.d, key.n);
+	const BigInt decrypted = data.PowMod(key->d, key->n);
 #endif
 
 	uint16_t blockSize = 0U;
@@ -317,7 +317,7 @@ void CryptoUtils::BlockSize(const Crypto::KeySize keySize, uint16_t* pDecrypted,
 		*pDecrypted = uint16_t(block - (BLOCK_SIZE_BYTES + GUARD_BYTES));
 }
 
-BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t& iters)
+BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize)
 {
 	const uint16_t keyBytes = KeyBytes(keySize) / 2U;
 	const uint16_t blocks = keyBytes > sizeof(BigInt::Base) ? keyBytes / sizeof(BigInt::Base) : 1U;
@@ -347,23 +347,20 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize, uint32_t&
 	}
 
 	const BigInt two(2U);
-	iters = 1U;
 	while (!randPrime.IsPrimeNumber())
 	{
 		//RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
 		//BigInt::SumWithoutSign(randPrime, two);
 		randPrime = randPrime + two;
-		++iters;
 	}
 
 	if (randPrime > keySize)
 	{
 		_ASSERT(0);
 		std::cerr << "Generated prime number is larger than expected, retry" << std::endl;
-		return GenerateRandomPrime(keySize, iters);
+		return GenerateRandomPrime(keySize);
 	}
 
-	//std::cout << "Prime number generated with :" << iters << " iterations" << std::endl;
 	return randPrime;
 }
 
@@ -435,7 +432,7 @@ Crypto::CryptoRet CryptoUtils::ValidateKeys(const Crypto::AsymmetricKeys* keys)
 	return ret;
 }
 
-Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey* key)
+Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey key)
 {
 	if (key == nullptr)
 		return Crypto::CryptoRet::INVALID_PARAMETER;
@@ -449,7 +446,7 @@ Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey* key)
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PublicKey* key)
+Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PublicKey key)
 {
 	if (key == nullptr)
 		return Crypto::CryptoRet::INVALID_PARAMETER;
@@ -473,7 +470,7 @@ uint16_t CryptoUtils::NeededBufferSizePublic(const Crypto::KeySize keySize)
 	return BUFFER_SIZE_PUBLIC(keySize);
 }
 
-Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PrivateKey* privKey, const Crypto::DataIn priv)
+Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PrivateKey privKey, const Crypto::DataIn priv)
 {
 	std::istringstream input;
 	input.str(std::string(priv.pData, priv.size));
@@ -490,13 +487,17 @@ Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PrivateKey* privKey, const Cryp
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PublicKey* pubKey, const Crypto::DataIn pub)
+Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PublicKey pubKey, const Crypto::DataIn pub)
 {
 	std::istringstream input;
 	input.str(std::string(pub.pData, pub.size));
 
 	if (!ParseFromRawData(input, pubKey->n)
 		|| !ParseFromRawData(input, pubKey->e))
+	{
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	}
+	else if (!GetKeySize(pubKey->n, pubKey->keySize))
 	{
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 	}

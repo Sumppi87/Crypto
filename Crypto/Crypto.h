@@ -3,10 +3,21 @@
 
 class Crypto
 {
-public:
-	struct PublicKey;
-	struct PrivateKey;
+private:
+	// Forward declarations of internal structs
+	struct _PublicKey;
+	struct _PrivateKey;
 
+public:
+	// Publically available types and definitions
+
+	//! \brief Pointer definition for public key
+	typedef _PublicKey* PublicKey;
+
+	//! \brief Pointer definition for private key
+	typedef _PrivateKey* PrivateKey;
+
+	//! \brief Supported key lengths
 	enum class KeySize : uint64_t
 	{
 		KS_64 = 64,
@@ -18,15 +29,17 @@ public:
 		KS_3072 = 3072
 	};
 
+	//! \brief Container holding both public and private keys
 	struct AsymmetricKeys
 	{
 		AsymmetricKeys();
 
-		PublicKey* pubKey;
-		PrivateKey* privKey;
+		PublicKey pubKey;
+		PrivateKey privKey;
 		KeySize keySize;
 	};
 
+	//! \brief Data input for the API, not modifiable
 	struct DataIn
 	{
 		DataIn(const char* data, const uint64_t s);
@@ -35,6 +48,7 @@ public:
 		uint64_t size;
 	};
 
+	//! \brief Data output for the API
 	struct DataOut
 	{
 		DataOut(char* data, const uint64_t s);
@@ -43,6 +57,7 @@ public:
 		uint64_t size;
 	};
 
+	//! \brief Generic return values of the API-functions
 	enum class CryptoRet
 	{
 		OK = 1,
@@ -51,6 +66,10 @@ public:
 		INVALID_PARAMETER = -3,
 		INTERNAL_ERROR = -4
 	};
+
+//!
+//! Key management related function
+//!
 public:
 	// !\Brief Generates a random public/private keypair
 	// !\param[in] size Keysize
@@ -63,6 +82,16 @@ public:
 	// !\param[in] keys Keys to deallocate
 	// !\return CryptoRet::OK if keys were successfully deallocated
 	static CryptoRet DeleteAsymmetricKeys(AsymmetricKeys* keys);
+
+	// !\Brief Destroys generated keys, i.e. releases allocated memory
+	// !\param[in] keys Keys to deallocate
+	// !\return CryptoRet::OK if keys were successfully deallocated
+	static CryptoRet DeleteKey(PublicKey* publicKey);
+
+	// !\Brief Destroys generated keys, i.e. releases allocated memory
+	// !\param[in] keys Keys to deallocate
+	// !\return CryptoRet::OK if keys were successfully deallocated
+	static CryptoRet DeleteKey(PrivateKey* privateKey);
 
 	// !\Brief Stores asymmetric keys to output buffer
 	// !\param[in] keys Asymmetric key to store
@@ -96,6 +125,24 @@ public:
 	// !\note Imported keys must be destroyed with DeleteAsymmetricKeys
 	static CryptoRet ImportAsymmetricKeys(AsymmetricKeys* keys, const DataIn priv, const DataIn pub);
 
+	// !\Brief Imports asymmetric public key from buffer
+	// !\param[out] pPublicKey Imported key from buffer
+	// !\param[in] pubData Buffer where the public key is stored
+	// !\return CryptoRet::OK if keys were successfully stored
+	// !\note Imported key must be destroyed with DeleteKey
+	static CryptoRet ImportKey(PublicKey* pPublicKey, const DataIn pubData);
+
+	// !\Brief Imports asymmetric private key from buffer
+	// !\param[out] pPrivateKey Imported key from buffer
+	// !\param[in] privData Buffer where the private key is stored
+	// !\return CryptoRet::OK if keys were successfully stored
+	// !\note Imported key must be destroyed with DeleteKey
+	static CryptoRet ImportKey(PrivateKey* pPrivateKey, const DataIn privData);
+
+//!
+//! Encryption/decryption related function
+//!
+public:
 	// !\Brief Encrypts data with given public key
 	// !\param[in] key Encryption key
 	// !\param[in] input Data to encrypt
@@ -110,7 +157,7 @@ public:
 	//           BlockSize : ((KeySize / 8) - 3)
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * (KeySize / 8)
-	static CryptoRet Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes);
+	static CryptoRet Encrypt(const PublicKey key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes);
 
 	// !\Brief Decrypts data with the given private key
 	// !\param[in] key Decryption key
@@ -126,7 +173,7 @@ public:
 	//           BlockSize : (KeySize / 8)
 	//           BlockCount : ceil(input.size / BlockSize)
 	//           NeededBufferSize : BlockCount * ((KeySize / 8) - 3)
-	static CryptoRet Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
+	static CryptoRet Decrypt(const PrivateKey key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
 
 	// Utilities
 public:
@@ -197,5 +244,12 @@ public:
 	{
 		static const uint64_t SIZE = BlockCountDecryption<k, size>::SIZE * BlockSizePlain<k>::SIZE;
 	};
-};
 
+private:
+	Crypto() = delete;
+	~Crypto() = delete;
+	Crypto(const Crypto&) = delete;
+	Crypto(Crypto&&) = delete;
+	Crypto& operator=(const Crypto&) = delete;
+	Crypto& operator=(Crypto&&) = delete;
+};
