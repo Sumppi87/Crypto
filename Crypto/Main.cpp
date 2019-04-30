@@ -7,10 +7,12 @@
 #include "FileAccess.h"
 #include <iostream>
 #include <iomanip>
+#include <thread>
 #include <sstream>
 #include <string>
 #include <chrono>
 #include <functional>
+#include <map>
 #include "safeint.h"
 
 namespace
@@ -57,6 +59,129 @@ namespace
 			break;
 		}
 		return retVal;
+	}
+
+	// Command layout, in bits
+	// | 7           4 | 3           0 |
+	// < params count >< command id    >
+	constexpr const uint8_t ONE_PARAM = (1 << 4);
+	constexpr const uint8_t TWO_PARAMS = (1 << 5) | ONE_PARAM;
+	enum Command
+	{
+		HELP = 0,
+		DETAILS = 1 | ONE_PARAM,
+		GENERATE_KEYS = 2 | ONE_PARAM,
+		STORE_KEYS = 3 | ONE_PARAM,
+		LOAD_PRIVATE_KEY = 4 | ONE_PARAM,
+		LOAD_PUBLIC_KEY = 5| ONE_PARAM,
+		ENCRYPT = 6 | TWO_PARAMS,
+		DECRYPT = 7 | TWO_PARAMS,
+#if defined(USE_THREADS)
+		THREAD_COUNT = 8 | ONE_PARAM,
+#endif
+	};
+
+	const std::map<std::string, Command> COMMAND_MAP =
+	{
+		std::make_pair("help", Command::HELP),
+		std::make_pair("details", Command::DETAILS),
+		std::make_pair("generate_keys", Command::GENERATE_KEYS),
+		std::make_pair("store_keys", Command::STORE_KEYS),
+		std::make_pair("load_private", Command::LOAD_PRIVATE_KEY),
+		std::make_pair("load_public", Command::LOAD_PUBLIC_KEY),
+		std::make_pair("encrypt", Command::ENCRYPT),
+		std::make_pair("decrypt", Command::DECRYPT),
+#if defined(USE_THREADS)
+		std::make_pair("threads", Command::THREAD_COUNT)
+#endif
+	};
+
+	const std::map<Command, std::string> COMMAND_HELP =
+	{
+		std::make_pair(Command::GENERATE_KEYS, "<key width>"),
+		std::make_pair(Command::STORE_KEYS, "<filename/path>"),
+		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file>"),
+		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file>"),
+		std::make_pair(Command::ENCRYPT, "<file to encrypt> <encrypted file>"),
+		std::make_pair(Command::DECRYPT, "<file to decrypt> <decrypted file>"),
+#if defined(USE_THREADS)
+		std::make_pair(Command::THREAD_COUNT, []()
+		{
+			std::stringstream s;
+			s << "<Threads [1..." << std::thread::hardware_concurrency() << "]>";
+			return s.str();
+		}())
+#endif
+	};
+
+	const std::map<Command, std::string> COMMAND_DETAILED_HELP =
+	{
+		std::make_pair(Command::GENERATE_KEYS, "<specify a key length to use, e.g. 1024>"),
+		std::make_pair(Command::STORE_KEYS, "<filename to store the keys, e.g. C:/Data/key (public key is exported as *.pub and private *.ppk)>"),
+		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file from where to load a private key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"),
+		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file where to load a public key. Can be absolute or relative filepath, e.g. C:/Data/key.pub>"),
+		std::make_pair(Command::ENCRYPT, "<file to encrypt, can be absolute or relative filepath> <encrypted file, can be absolute or relative filepath>"),
+		std::make_pair(Command::DECRYPT, "<file to decrypt, can be absolute or relative filepath> <decrypted file, can be absolute or relative filepath>"),
+#if defined(USE_THREADS)
+		std::make_pair(Command::THREAD_COUNT, []()
+		{
+			std::stringstream s;
+			s << "<how many threads to utilize in operations, must be between [1..." << std::thread::hardware_concurrency() << "]>";
+			return s.str();
+		}())
+#endif
+	};
+
+	constexpr const char CMD_START = '[';
+	constexpr const char CMD_END = ']';
+	const std::string CMD_PREFIX("--");
+
+	std::string GetCommandHelp(const Command command, const std::string& cmd_str)
+	{
+		std::stringstream s;
+		s << CMD_START;
+		s << CMD_PREFIX << cmd_str;
+
+		auto iter = COMMAND_HELP.find(command);
+		if (iter != COMMAND_HELP.end())
+		{
+			s << " ";
+			s << (*iter).second;
+		}
+		s << CMD_END;
+		return s.str();
+	}
+
+	void PrintHelp()
+	{
+		std::cout << "Usage: " << std::endl;
+		for (auto iter = COMMAND_MAP.begin(); iter != COMMAND_MAP.end(); ++iter)
+		{
+			std::cout << "     " << GetCommandHelp((*iter).second, (*iter).first) << std::endl;
+		}
+	}
+
+	void PrintDetailedHelp(const std::string command)
+	{
+		auto iter = COMMAND_MAP.find(command);
+		if (iter != COMMAND_MAP.end())
+		{
+			std::cout << "Usage of '" << command << "'" << std::endl;
+			std::cout << CMD_START;
+			std::cout << CMD_PREFIX << command;
+
+			auto iter_detail = COMMAND_DETAILED_HELP.find((*iter).second);
+			if (iter_detail != COMMAND_DETAILED_HELP.end())
+			{
+				std::cout << " ";
+				std::cout << (*iter_detail).second;
+			}
+			std::cout << CMD_END << std::endl;
+		}
+		else
+		{
+			std::cerr << "Unknown command: " << command << std::endl;
+		}
 	}
 }
 
