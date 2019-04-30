@@ -50,13 +50,12 @@ Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* 
 	CryptoRet ret = CryptoRet::OK;
 	try
 	{
-		pKeys->privKey = new PrivateKey();
-		pKeys->pubKey = new PublicKey();
+		pKeys->privKey = new _PrivateKey();
+		pKeys->pubKey = new _PublicKey();
 		pKeys->keySize = s;
 
-		uint32_t temp = 0U;
-		BigInt p = CryptoUtils::GenerateRandomPrime(s, temp);
-		BigInt q = CryptoUtils::GenerateRandomPrime(s, temp);
+		BigInt p = CryptoUtils::GenerateRandomPrime(s);
+		BigInt q = CryptoUtils::GenerateRandomPrime(s);
 
 		BigInt n = p * q;
 		BigInt t = (p - 1U) * (q - 1U);
@@ -120,11 +119,27 @@ Crypto::CryptoRet Crypto::DeleteAsymmetricKeys(AsymmetricKeys* keys)
 	if (keys == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
 
-	delete keys->privKey;
-	keys->privKey = nullptr;
-	delete keys->pubKey;
-	keys->pubKey = nullptr;
+	DeleteKey(&keys->privKey);
+	DeleteKey(&keys->pubKey);
 
+	return CryptoRet::OK;
+}
+
+Crypto::CryptoRet Crypto::DeleteKey(PublicKey* publicKey)
+{
+	if (publicKey == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	delete *publicKey;
+	*publicKey = nullptr;
+	return CryptoRet::OK;
+}
+
+Crypto::CryptoRet Crypto::DeleteKey(PrivateKey* privateKey)
+{
+	if (privateKey == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	delete *privateKey;
+	*privateKey = nullptr;
 	return CryptoRet::OK;
 }
 
@@ -161,21 +176,32 @@ Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const Data
 	else if (!ValidateBuffers(priv, pub))
 		return CryptoRet::INVALID_PARAMETER;
 
+	CryptoRet ret = ImportKey(&pKeys->privKey, priv);
+	if (ret == CryptoRet::OK)
+		ret = ImportKey(&pKeys->pubKey, pub);
+
+	if (ret != CryptoRet::OK)
+	{
+		DeleteKey(&pKeys->privKey);
+		DeleteKey(&pKeys->pubKey);
+	}
+	return ret;
+}
+
+Crypto::CryptoRet Crypto::ImportKey(PublicKey* pPublicKey, const DataIn pubData)
+{
+	if (pPublicKey == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
 	CryptoRet ret = CryptoRet::OK;
 	try
 	{
-		pKeys->privKey = new PrivateKey();
-		pKeys->pubKey = new PublicKey();
+		if (*pPublicKey == nullptr)
+			*pPublicKey = new _PublicKey();
 
-		ret = CryptoUtils::ImportKey(pKeys->privKey, priv);
+		ret = CryptoUtils::ImportKey(*pPublicKey, pubData);
 		if (ret == CryptoRet::OK)
-		{
-			pKeys->keySize = pKeys->privKey->keySize;
-			pKeys->pubKey->keySize = pKeys->privKey->keySize;
-			ret = CryptoUtils::ImportKey(pKeys->pubKey, pub);
-		}
-		if (ret == CryptoRet::OK)
-			ret = CryptoUtils::ValidateKeys(pKeys);
+			ret = CryptoUtils::ValidateKey(*pPublicKey);
 	}
 	catch (const std::invalid_argument& e)
 	{
@@ -200,11 +226,55 @@ Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const Data
 
 	if (ret != CryptoRet::OK)
 	{
-		delete pKeys->privKey;
-		pKeys->privKey = nullptr;
-		delete pKeys->pubKey;
-		pKeys->pubKey = nullptr;
+		delete *pPublicKey;
+		*pPublicKey = nullptr;
 	}
+
+	return ret;
+}
+
+Crypto::CryptoRet Crypto::ImportKey(PrivateKey* pPrivateKey, const DataIn privData)
+{
+	if (pPrivateKey == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	CryptoRet ret = CryptoRet::OK;
+	try
+	{
+		if (*pPrivateKey == nullptr)
+			*pPrivateKey = new _PrivateKey();
+
+		ret = CryptoUtils::ImportKey(*pPrivateKey, privData);
+		if (ret == CryptoRet::OK)
+			ret = CryptoUtils::ValidateKey(*pPrivateKey);
+	}
+	catch (const std::invalid_argument& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::invalid_argument occured: " << e.what() << std::endl;
+	}
+	catch (const std::logic_error& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::logic_error occured: " << e.what() << std::endl;
+	}
+	catch (const std::bad_alloc& e)
+	{
+		ret = CryptoRet::INSUFFICIENT_RESOURCES;
+		std::cerr << "std::bad_alloc occured: " << e.what() << std::endl;
+	}
+	catch (...)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "Unknown exception occured" << std::endl;
+	}
+
+	if (ret != CryptoRet::OK)
+	{
+		delete *pPrivateKey;
+		*pPrivateKey = nullptr;
+	}
+
 	return ret;
 }
 
@@ -218,7 +288,7 @@ void Crypto::NeededBufferSizeForExport(const KeySize keySize,
 		*pPublicKeyBytes = CryptoUtils::NeededBufferSizePublic(keySize);
 }
 
-Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes)
+Crypto::CryptoRet Crypto::Encrypt(const PublicKey key, const DataIn input, const DataOut output, uint64_t* pEncryptedBytes)
 {
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
@@ -226,8 +296,6 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pEncryptedBytes == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
-
-	const bool inPlace = input.pData == output.pData;
 
 	// BlockSize : ((KeySize / 8) - 2)
 	// BlockCount : ceil(input.size / BlockSize)
@@ -243,13 +311,9 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 
 	Crypto::CryptoRet ret = Crypto::CryptoRet::OK;
 
-	if (inPlace)
-	{
-		// TODO
-		ret = Crypto::CryptoRet::INTERNAL_ERROR;
-	}
 #ifdef USE_THREADS
-	else
+	const bool inPlace = input.pData == output.pData;
+	if (!inPlace)
 	{
 		std::atomic<uint64_t> remainingData = input.size;
 		std::atomic<uint64_t> block = 0U;
@@ -273,7 +337,7 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 				const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
 				auto src = input.pData + (blockSizePlain * i);
 				auto dst = output.pData + (blockSizeEncrypted * i);
-				auto ret = CryptoUtils::EncryptBlock(*key,
+				auto ret = CryptoUtils::EncryptBlock(key,
 					DataIn(src, size),
 					DataOut(dst, blockSizeEncrypted),
 					&encryptedBytes);
@@ -287,8 +351,6 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 					*pRet = ret;
 					break;
 				}
-
-				//*pRemainingData -= blockSizePlain;
 			}
 		};
 
@@ -297,16 +359,16 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 		if (ret == CryptoRet::OK)
 			*pEncryptedBytes = encrypted;
 	}
-#else
-	else
+	else // In-place encryption cannot be threaded
+#endif
 	{
 		auto remainingData = input.size;
-		for (auto i = 0; i < blockCount; ++i)
+		for (auto i = blockCount - 1;;)
 		{
-			const auto size = uint16_t(remainingData > blockSizePlain ? blockSizePlain : remainingData);
+			const auto size = (remainingData % blockSizePlain) == 0 ? blockSizePlain : (remainingData % blockSizePlain);
 			auto src = input.pData + (blockSizePlain * i);
 			auto dst = output.pData + (blockSizeEncrypted * i);
-			ret = CryptoUtils::EncryptBlock(*key,
+			ret = CryptoUtils::EncryptBlock(key,
 				DataIn(src, size),
 				DataOut(dst, blockSizeEncrypted),
 				pEncryptedBytes);
@@ -317,15 +379,19 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey* key, const DataIn input, cons
 				break;
 			}
 
-			remainingData -= blockSizePlain;
+			remainingData -= size;
+
+			if (i > 0)
+				--i;
+			else
+				break;
 		}
 	}
-#endif
 
 	return Crypto::CryptoRet::OK;
 }
 
-Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes)
+Crypto::CryptoRet Crypto::Decrypt(const PrivateKey key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes)
 {
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
@@ -333,8 +399,6 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pDecryptedBytes == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
-
-	const bool inPlace = input.pData == output.pData;
 
 	// BlockSize : ((KeySize / 8) - 2)
 	// BlockCount : ceil(input.size / BlockSize)
@@ -349,13 +413,9 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
 	Crypto::CryptoRet ret = Crypto::CryptoRet::OK;
-	if (inPlace)
-	{
-		// TODO
-		ret = Crypto::CryptoRet::INTERNAL_ERROR;
-	}
 #ifdef USE_THREADS
-	else
+	const bool inPlace = input.pData == output.pData;
+	if (!inPlace)
 	{
 		std::atomic<uint64_t> block = 0U;
 		std::atomic<uint64_t> decrypted = 0U;
@@ -373,7 +433,7 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 				uint64_t bytes = 0U;
 				auto src = input.pData + (blockSizeEncrypted * i);
 				auto dst = output.pData + (blockSizePlain * i);
-				auto ret = CryptoUtils::DecryptBlock(*key,
+				auto ret = CryptoUtils::DecryptBlock(key,
 					DataIn(src, blockSizeEncrypted),
 					DataOut(dst, blockSizePlain),
 					&bytes);
@@ -395,14 +455,14 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 		if (ret == CryptoRet::OK)
 			*pDecryptedBytes = decrypted;
 	}
-#else
-	else
+	else // In-place decryption cannot be threaded
+#endif
 	{
-		for (auto i = 0; i < blockCount; ++i)
+		for (size_t i = 0; i < blockCount; ++i)
 		{
 			auto src = input.pData + (blockSizeEncrypted * i);
 			auto dst = output.pData + (blockSizePlain * i);
-			ret = CryptoUtils::DecryptBlock(*key,
+			ret = CryptoUtils::DecryptBlock(key,
 				DataIn(src, blockSizeEncrypted),
 				DataOut(dst, blockSizePlain),
 				pDecryptedBytes);
@@ -414,7 +474,7 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey* key, const DataIn input, con
 			}
 		}
 	}
-#endif
+
 	return ret;
 }
 
