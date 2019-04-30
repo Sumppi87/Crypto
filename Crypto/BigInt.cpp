@@ -114,7 +114,6 @@ namespace
 		}
 	}
 
-#if defined (USE_64BIT_VALUES)
 	inline void AddResult(uint64_t* src, const uint64_t val)
 	{
 		if (_addcarry_u64(0U, val, *src, src))
@@ -144,39 +143,6 @@ namespace
 		p += shift;
 		return p;
 	}
-#else
-	template <typename Base, typename Mul>
-	union MulUtil
-	{
-		MulUtil(const Mul m)
-			: val(m) {}
-
-		Mul val;
-		struct
-		{
-			Base valLower;
-			Base carryOver;
-		};
-	};
-
-	template <typename Base, typename Mul>
-	void AddResult(std::vector<Base>& res, const MulUtil<Base, Mul> mul, const size_t index)
-	{
-		// First, handle carry over
-		if (mul.carryOver)
-		{
-			AddResult(res, MulUtil<Base, Mul>(mul.carryOver), index + 1);
-		}
-
-		const MulUtil<Base, Mul> t((Mul)res[index] + (Mul)mul.valLower);
-		res[index] = t.valLower;
-
-		if (t.carryOver)
-		{
-			AddResult(res, MulUtil<Base, Mul>(t.carryOver), index + 1);
-		}
-	};
-#endif
 }
 
 BigInt::ValueContainer::ValueContainer()
@@ -612,23 +578,11 @@ BigInt BigInt::operator*(const BigInt& other) const
 		{
 			for (size_t ii = 0U; ii < other.CurrentSize(); ++ii)
 			{
-#if defined(USE_64BIT_VALUES)
 				Base carry = 0U;
 				const Base mul = _umul128(m_vals[i], other.m_vals[ii], &carry);
 				AddResult(&res.m_vals[i + ii], mul);
 				if (carry)
 					AddResult(&res.m_vals[i + ii + 1], carry);
-#else
-
-				const Mul val1 = multiplier[i];
-				const Mul val2 = multiplied[ii];
-				if (val1 == 0 || val2 == 0)
-				{
-					continue;
-				}
-				MulUtil<Base, Mul> mul(val1 * val2);
-				AddResult(res.m_vals, mul, i + ii);
-#endif
 			}
 		}
 
@@ -1367,7 +1321,6 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 
 	for (size_t i = 0U; i < s; ++i)
 	{
-#if defined(USE_64BIT_VALUES)
 		const Base val1 = i < size ? m_vals[i] : 0U;
 		const Base val2 = i < size2 ? other.m_vals[i] : 0U;
 
@@ -1375,13 +1328,6 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 		if (_addcarry_u64(0U, val1, val2, &sum))
 			AddResult(&copy.m_vals[i + 1U], 1U);
 		AddResult(&copy.m_vals[i], sum);
-
-#else
-		const Mul val1 = i < size ? m_vals[i] : 0;
-		const Mul val2 = i < size2 ? other.m_vals[i] : 0;
-		MulUtil<Base, Mul> sum(val1 + val2);
-		AddResult(copy.m_vals, sum, i);
-#endif
 	}
 
 	copy.CleanPreceedingZeroes();
