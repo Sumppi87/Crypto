@@ -1,6 +1,10 @@
 #pragma once
 #include <cstdint>
 
+#if not defined(_M_X64)
+#error("only 64bit is supported")
+#endif
+
 class Crypto
 {
 private:

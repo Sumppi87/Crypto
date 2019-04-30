@@ -2,7 +2,6 @@
 #include <string>
 #include <atomic>
 
-#define USE_64BIT_IF_POSSIBLE
 #define MAX_SIZE 64
 
 class CryptoUtils;
@@ -11,12 +10,8 @@ class BigInt
 {
 public:
 
-#if (defined(_M_X64) && defined(USE_64BIT_IF_POSSIBLE))
+#if defined(_M_X64)
 	typedef uint64_t Base;
-#define USE_64BIT_VALUES
-#else
-	typedef uint32_t Base;
-	typedef uint64_t Mul;
 #endif
 
 	static BigInt FromRawData(const char* data, const size_t length);
