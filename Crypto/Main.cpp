@@ -110,7 +110,8 @@ bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
 bool EncryptDecrypt(const bool encrypt,
 	Crypto::AsymmetricKeys* pKeys,
 	std::ifstream& in,
-	std::ofstream& out)
+	std::ofstream& out,
+	const bool inPlace = false)
 {
 	std::filebuf* pbuf = in.rdbuf();
 	if (pbuf == nullptr)
@@ -125,8 +126,24 @@ bool EncryptDecrypt(const bool encrypt,
 	const auto blockSizeInput = encrypt ? Crypto::GetBlockSizePlain(pKeys->keySize) : Crypto::GetBlockSizeEncrypted(pKeys->keySize);
 	const auto blockSizeOutput = encrypt ? Crypto::GetBlockSizeEncrypted(pKeys->keySize) : Crypto::GetBlockSizePlain(pKeys->keySize);
 	const auto blocks = 1000U;
-	char* input = new char[blocks * blockSizeInput];
-	char* output = new char[blocks * blockSizeOutput];
+
+	char* input = nullptr;
+	char* output = nullptr;
+	if (!inPlace)
+	{
+		input = new char[blocks * blockSizeInput];
+		output = new char[blocks * blockSizeOutput];
+	}
+	else if (blockSizeInput > blockSizeOutput)
+	{
+		input = new char[blocks * blockSizeInput];
+		output = input;
+	}
+	else
+	{
+		output = new char[blocks * blockSizeOutput];
+		input = output;
+	}
 
 	while (in.good() && out.good() && ret)
 	{
@@ -163,46 +180,14 @@ bool EncryptDecrypt(const bool encrypt,
 		}
 	}
 
+	if (!inPlace)
+		delete[] output;
 	delete[] input;
-	delete[] output;
 
 	return ret;
 }
 
-bool EncryptData(Crypto::AsymmetricKeys* pKeys,
-	const std::string& fileToEncrypt,
-	const std::string& encryptedFile)
-{
-	bool ret = false;
-
-	std::ifstream in;
-	std::ofstream out;
-	if (!OpenForRead(fileToEncrypt, in))
-	{
-		std::cerr << "Failed to open file '" << fileToEncrypt << "' for encryption!" << std::endl;
-	}
-	else if (!OpenForWrite(encryptedFile, out))
-	{
-		std::cerr << "Failed to open file '" << encryptedFile << "' for encrypted data!" << std::endl;
-	}
-	else
-	{
-		ret = EncryptDecrypt(true, pKeys, in, out);
-	}
-
-	in.close();
-	out.flush();
-	out.close();
-
-	if (Crypto::DeleteAsymmetricKeys(pKeys) != Crypto::CryptoRet::OK)
-	{
-		std::cerr << "Deleting Asymmetric keys failed!" << std::endl;
-		ret = false;
-	}
-	return ret;
-}
-
-bool EncryptData(const Crypto::KeySize keySize, const std::string& fileToEncrypt, const std::string& encryptedFile)
+bool GenerateKeys(const Crypto::KeySize keySize)
 {
 	bool ret = false;
 	std::cout << "Generating asymmetric keys... ";
@@ -223,18 +208,7 @@ bool EncryptData(const Crypto::KeySize keySize, const std::string& fileToEncrypt
 		if (ExportKeyToFile(&keys))
 		{
 			std::cout << "Done" << std::endl;
-			std::cout << "Encrypting data... ";
-			const auto encryption_start = std::chrono::high_resolution_clock::now();
-
-			ret = EncryptData(&keys, fileToEncrypt, encryptedFile);
-
-			const auto encryption_end = std::chrono::high_resolution_clock::now();
-			auto encryption_dur = std::chrono::duration_cast<std::chrono::milliseconds>(encryption_end - encryption_start).count();
-
-			if (ret)
-				std::cout << "Done (" << encryption_dur << "ms)" << std::endl;
-			else
-				std::cerr << "Error!" << std::endl;
+			ret = true;
 		}
 		else
 		{
@@ -244,38 +218,32 @@ bool EncryptData(const Crypto::KeySize keySize, const std::string& fileToEncrypt
 	return ret;
 }
 
-bool ImportKeys(Crypto::AsymmetricKeys* pKeys)
+template <class KeyType>
+bool ImportKey(KeyType* key, const std::string& keyFile)
 {
-	auto ReadKeyFromFile = [](char* buffer, uint16_t& bytes, const bool isPrivate)
+	auto ReadKeyFromFile = [&keyFile](char* buffer, uint16_t& bytes)
 	{
 		bool ret = false;
 
 		std::ifstream stream;
-		if (OpenForRead(GetFileName(isPrivate), stream)
+		if (OpenForRead(keyFile, stream)
 			&& !stream.bad())
 		{
 			std::filebuf* pbuf = stream.rdbuf();
 			bytes = uint16_t(pbuf->sgetn(buffer, bytes));
-			//bytes = uint16_t(stream.readsome(buffer, bytes));
 			stream.close();
 			ret = bytes > 0;
 		}
 		return ret;
 	};
 
-	uint16_t publicBytes = 2048;
-	uint16_t privateBytes = 2048;
-	char privateKey[2048] = {};
-	char publicKey[2048] = {};
+	uint16_t bufferSize = 2048;
+	char buffer[2048] = {};
 
 	Crypto::CryptoRet ret = Crypto::CryptoRet::INTERNAL_ERROR;
-	if (ReadKeyFromFile(privateKey, privateBytes, true)
-		&& ReadKeyFromFile(publicKey, publicBytes, false))
+	if (ReadKeyFromFile(buffer, bufferSize))
 	{
-		ret = Crypto::ImportAsymmetricKeys(
-			pKeys,
-			Crypto::DataIn(privateKey, privateBytes),
-			Crypto::DataIn(publicKey, publicBytes));
+		ret = Crypto::ImportKey(key, Crypto::DataIn(buffer, bufferSize));
 	}
 	return ret == Crypto::CryptoRet::OK;
 }
@@ -287,8 +255,8 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 	std::ifstream in;
 	std::ofstream out;
 
-	std::cout << "Importing asymmetric keys... ";
-	if (!ImportKeys(&keys))
+	std::cout << "Importing asymmetric private key... ";
+	if (!ImportKey(&keys.privKey, GetFileName(true)))
 	{
 		std::cerr << "Error!" << std::endl;
 	}
@@ -309,7 +277,12 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 			std::cout << "Done" << std::endl;
 			std::cout << "Decrypting the file... ";
 			const auto start = std::chrono::high_resolution_clock::now();
-			ret = EncryptDecrypt(false, &keys, in, out);
+#if defined(USE_THREADS)
+			const bool inPlace = false;
+#else
+			const bool inPlace = true;
+#endif
+			ret = EncryptDecrypt(false, &keys, in, out, inPlace);
 			const auto end = std::chrono::high_resolution_clock::now();
 			const auto keyGen_start = std::chrono::high_resolution_clock::now();
 			const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
@@ -325,9 +298,68 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 	out.flush();
 	out.close();
 
-	if (Crypto::DeleteAsymmetricKeys(&keys) != Crypto::CryptoRet::OK)
+	if (Crypto::DeleteKey(&keys.privKey) != Crypto::CryptoRet::OK)
 	{
-		std::cerr << "Deleting Asymmetric keys failed!" << std::endl;
+		std::cerr << "Deleting Asymmetric private key failed!" << std::endl;
+		ret = false;
+	}
+
+	return ret;
+}
+
+bool EncryptData(const std::string& fileToEncrypt, const std::string& encryptedFile)
+{
+	bool ret = false;
+	Crypto::AsymmetricKeys keys;
+	std::ifstream in;
+	std::ofstream out;
+
+	std::cout << "Importing asymmetric public key... ";
+	if (!ImportKey(&keys.pubKey, GetFileName(false)))
+	{
+		std::cerr << "Error!" << std::endl;
+	}
+	else
+	{
+		std::cout << "Done" << std::endl;
+		std::cout << "Opening unencrypted & target file... ";
+		if (!OpenForRead(fileToEncrypt, in))
+		{
+			std::cerr << "Error! Opening file '" << fileToEncrypt << "' for encryption failed!" << std::endl;
+		}
+		else if (!OpenForWrite(encryptedFile, out))
+		{
+			std::cerr << "Error! Opening file '" << encryptedFile << "' for encrypted data failed!" << std::endl;
+		}
+		else
+		{
+			std::cout << "Done" << std::endl;
+			std::cout << "Encrypting the file... ";
+			const auto start = std::chrono::high_resolution_clock::now();
+#if defined(USE_THREADS)
+			const bool inPlace = false;
+#else
+			const bool inPlace = true;
+#endif
+			ret = EncryptDecrypt(true, &keys, in, out, inPlace);
+			const auto end = std::chrono::high_resolution_clock::now();
+			const auto keyGen_start = std::chrono::high_resolution_clock::now();
+			const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+			if (ret)
+				std::cout << "Done (" << duration << "ms)" << std::endl;
+			else
+				std::cerr << "Error!" << std::endl;
+		}
+	}
+
+	in.close();
+	out.flush();
+	out.close();
+
+	if (Crypto::DeleteKey(&keys.pubKey) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Deleting Asymmetric public key failed!" << std::endl;
 		ret = false;
 	}
 
@@ -338,16 +370,22 @@ int main(int argc, char** argv)
 {
 	if (argc < 2)
 		return -1;
-	else if (std::string(argv[1]) == "encrypt")
+	else if (std::string(argv[1]) == "create_keys")
 	{
 		Crypto::KeySize keySize;
-		if (GetKeySize(argv[2], keySize))
+		if (argc < 2)
 		{
-			return EncryptData(keySize, "test.cpp", "test.cpp.enc");
+			std::cerr << "Error, no keysize provided" << std::endl;
+		}
+		else if (GetKeySize(argv[2], keySize))
+		{
+			return GenerateKeys(keySize);
 		}
 		else
 			std::cerr << "Error, invalid keysize" << std::endl;
 	}
+	else if (std::string(argv[1]) == "encrypt")
+		return EncryptData("test.cpp", "test.cpp.enc");
 	else if (std::string(argv[1]) == "decrypt")
 		return DecryptData("test.cpp.enc", "test_decrypted.cpp");
 	else if (std::string(argv[1]) == "test")
