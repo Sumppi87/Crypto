@@ -145,6 +145,81 @@ namespace
 	}
 }
 
+BigInt::ValueContainer::ValueContainer()
+	: m_vals{}
+	, m_currentSize(1)
+{
+	m_vals[0U] = 0U;
+}
+
+void BigInt::ValueContainer::SetZero()
+{
+	memset(m_vals, 0U, m_currentSize * sizeof(Base));
+	m_currentSize = 1U;
+	m_vals[0U] = 0U;
+}
+
+void BigInt::ValueContainer::CleanPreceedingZeroes()
+{
+	for (auto i = m_currentSize - 1U; i > 0U; --i)
+	{
+		if (m_vals[i] == 0U)
+		{
+			m_currentSize--;
+		}
+		else
+		{
+			break;
+		}
+	}
+}
+
+BigInt::Base& BigInt::ValueContainer::operator[](const size_t index)
+{
+#if defined(_DEBUG) || defined(DEBUG_MEM_ACCESS)
+	_STL_VERIFY(index < m_currentSize, "index out of range");
+#endif
+	return m_vals[index];
+}
+
+const BigInt::Base& BigInt::ValueContainer::operator[](const size_t index) const
+{
+#if defined(_DEBUG) || defined(DEBUG_MEM_ACCESS)
+	_STL_VERIFY(index < m_currentSize, "index out of range");
+#endif
+	return m_vals[index];
+}
+
+BigInt::ValueContainer::operator void*()
+{
+	return (void*)m_vals;
+}
+
+BigInt::ValueContainer::operator const void*() const
+{
+	return (const void*)m_vals;
+}
+
+BigInt::ValueContainer::operator char*()
+{
+	return (char*)m_vals;
+}
+
+BigInt::ValueContainer::operator const char*() const
+{
+	return (const char*)m_vals;
+}
+
+BigInt::ValueContainer::operator uint64_t*()
+{
+	return m_vals;
+}
+
+BigInt::ValueContainer::operator const uint64_t*() const
+{
+	return m_vals;
+}
+
 /*static*/
 BigInt BigInt::FromRawData(const char* data, const size_t length)
 {
@@ -247,72 +322,53 @@ void BigInt::FromBase16(const char* hex)
 
 BigInt::BigInt()
 	: m_sign(Sign::POS)
-	, m_currentSize(1)
-	, m_vals{}
 {
-	m_vals[0U] = 0U;
 }
 
 BigInt::BigInt(const Base* data, const size_t currentSize)
 	: m_sign(Sign::POS)
-	, m_currentSize(currentSize)
-	, m_vals{}
 {
 	CopyFromSrc(data, currentSize, 0U);
 }
 
 BigInt::BigInt(const uint8_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val, sizeof(uint8_t));
 }
 
 BigInt::BigInt(const uint16_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val, sizeof(uint16_t));
 }
 
 BigInt::BigInt(const uint32_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const uint64_t val)
 	: m_sign(Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const int val)
 	: m_sign(val < 0U ? Sign::NEG : Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val < 0U ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const int64_t val)
 	: m_sign(val < 0U ? Sign::NEG : Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	FromNum(val < 0 ? uint64_t(-val) : (uint64_t)val, sizeof(uint64_t));
 }
 
 BigInt::BigInt(const char* input)
 	: m_sign(Sign::POS)
-	, m_currentSize(0U)
-	, m_vals{}
 {
 	ParseStrInput(input);
 }
@@ -1099,7 +1155,7 @@ void BigInt::IsPrimeNumberPriv(std::atomic<uint8_t>* iters, bool* pIsPrime) cons
 		// Pick a size for 'a' between one and CurrentSize of this
 		auto size = (rand_gen.Random64() % CurrentSize()) + 1U;
 		a.Resize(size);
-		rand_gen.RandomData(a.m_vals, a.CurrentSize());
+		rand_gen.RandomData((uint64_t*)a.m_vals, a.CurrentSize());
 		a = (a % n_3) + 2U;
 
 		BigInt x = a.PowMod(d, *this);
@@ -1162,6 +1218,11 @@ void BigInt::Div(const BigInt& div, BigInt& rem, BigInt* pQuot /*= nullptr*/) co
 
 		SubstractWithoutSign(rem, divisor);
 	}
+}
+
+void BigInt::CleanPreceedingZeroes()
+{
+	m_vals.CleanPreceedingZeroes();
 }
 
 void BigInt::SetBit(const uint64_t bitNo)
@@ -1237,29 +1298,12 @@ bool BigInt::IsBase2(uint64_t& base) const
 void BigInt::SetZero()
 {
 	m_sign = Sign::POS;
-	memset(m_vals, 0U, m_currentSize * sizeof(Base));
-	m_currentSize = 1U;
-	m_vals[0U] = 0U;
+	m_vals.SetZero();
 }
 
 size_t BigInt::CurrentSize() const
 {
-	return m_currentSize;
-}
-
-void BigInt::CleanPreceedingZeroes()
-{
-	for (auto i = CurrentSize() - 1U; i > 0U; --i)
-	{
-		if (m_vals[i] == 0U)
-		{
-			m_currentSize--;
-		}
-		else
-		{
-			break;
-		}
-	}
+	return m_vals.m_currentSize;
 }
 
 void BigInt::FromNum(const uint64_t val, const uint8_t size)
@@ -1442,7 +1486,7 @@ void BigInt::Resize(const size_t size)
 		std::cout << "Max size of BigInt: " << maxSize << std::endl;
 	}
 #endif
-	m_currentSize = size;
+	m_vals.m_currentSize = size;
 }
 
 BigInt::Base BigInt::MostSignificant() const
