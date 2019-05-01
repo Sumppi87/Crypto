@@ -65,7 +65,6 @@ namespace
 	{
 		HELP,
 		GENERATE_KEYS,
-		STORE_KEYS,
 		LOAD_PRIVATE_KEY,
 		LOAD_PUBLIC_KEY,
 		ENCRYPT,
@@ -76,7 +75,6 @@ namespace
 	const std::list<Command> COMMANDS = {
 		Command::HELP,
 		Command::GENERATE_KEYS,
-		Command::STORE_KEYS,
 		Command::LOAD_PRIVATE_KEY,
 		Command::LOAD_PUBLIC_KEY,
 		Command::ENCRYPT,
@@ -90,8 +88,7 @@ namespace
 	{
 		{Command::HELP, 0},
 		{Command::HELP, 1},
-		{Command::GENERATE_KEYS, 1},
-		{Command::STORE_KEYS, 1},
+		{Command::GENERATE_KEYS, 2},
 		{Command::LOAD_PRIVATE_KEY, 1},
 		{Command::LOAD_PUBLIC_KEY, 1},
 		{Command::ENCRYPT, 2},
@@ -99,16 +96,16 @@ namespace
 		{Command::THREAD_COUNT, 1},
 	};
 
-	const std::multimap<Command, Command> RELATED_COMMMANDS =
+	typedef bool is_mandatory;
+	const std::multimap<Command, std::pair<Command, is_mandatory>> RELATED_COMMMANDS =
 	{
-		{Command::DECRYPT, Command::LOAD_PRIVATE_KEY},
-		{Command::ENCRYPT, Command::LOAD_PUBLIC_KEY},
-		{Command::GENERATE_KEYS, Command::STORE_KEYS},
+		{Command::DECRYPT, {Command::LOAD_PRIVATE_KEY, true}},
+		{Command::ENCRYPT, {Command::LOAD_PUBLIC_KEY, true}},
 
 #if defined(USE_THREADS)
-		{Command::GENERATE_KEYS, Command::THREAD_COUNT},
-		{Command::ENCRYPT, Command::THREAD_COUNT},
-		{Command::DECRYPT, Command::THREAD_COUNT}
+		{Command::GENERATE_KEYS, {Command::THREAD_COUNT, false}},
+		{Command::ENCRYPT, {Command::THREAD_COUNT, false}},
+		{Command::DECRYPT, {Command::THREAD_COUNT, false}},
 #endif
 	};
 
@@ -116,7 +113,6 @@ namespace
 	{
 		std::make_pair("help", Command::HELP),
 		std::make_pair("generate_keys", Command::GENERATE_KEYS),
-		std::make_pair("store_keys", Command::STORE_KEYS),
 		std::make_pair("load_private", Command::LOAD_PRIVATE_KEY),
 		std::make_pair("load_public", Command::LOAD_PUBLIC_KEY),
 		std::make_pair("encrypt", Command::ENCRYPT),
@@ -128,8 +124,7 @@ namespace
 
 	const std::map<Command, std::string> COMMAND_HELP =
 	{
-		std::make_pair(Command::GENERATE_KEYS, "<key width>"),
-		std::make_pair(Command::STORE_KEYS, "<filename/path>"),
+		std::make_pair(Command::GENERATE_KEYS, "<key width> <filename/path>"),
 		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file>"),
 		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file>"),
 		std::make_pair(Command::ENCRYPT, "<file to encrypt> <encrypted file>"),
@@ -144,8 +139,7 @@ namespace
 
 	const std::map<Command, std::string> COMMAND_DETAILED_HELP =
 	{
-		std::make_pair(Command::GENERATE_KEYS, "<specify a key length to use, e.g. 1024>"),
-		std::make_pair(Command::STORE_KEYS, "<filename to store the keys, e.g. C:/Data/key (public key is exported as *.pub and private *.ppk)>"),
+		std::make_pair(Command::GENERATE_KEYS, "<specify a key length to use, e.g. 1024> <filename to store the keys, e.g. C:/Data/key (public key is exported as *.pub and private *.ppk)>"),
 		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file from where to load a private key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"),
 		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file where to load a public key. Can be absolute or relative filepath, e.g. C:/Data/key.pub>"),
 		std::make_pair(Command::ENCRYPT, "<file to encrypt, can be absolute or relative filepath> <encrypted file, can be absolute or relative filepath>"),
@@ -158,8 +152,10 @@ namespace
 		}())
 	};
 
-	constexpr const char CMD_START = '[';
-	constexpr const char CMD_END = ']';
+	constexpr const char* CMD_START = "[";
+	constexpr const char* CMD_END = "]";
+	constexpr const char* OPTIONAL_START = "{";
+	constexpr const char* OPTIONAL_END = "}";
 	const std::string CMD_PREFIX("--");
 
 	std::string GetCommandStr(const Command cmd)
@@ -172,9 +168,9 @@ namespace
 		return "Unkown command";
 	}
 
-	std::list<Command> RelatedCommands(const Command cmd)
+	std::list<std::pair<Command, is_mandatory>> RelatedCommands(const Command cmd)
 	{
-		std::list<Command> ret;
+		std::list<std::pair<Command, is_mandatory>> ret;
 		auto range = RELATED_COMMMANDS.equal_range(cmd);
 		for (auto it = range.first; it != range.second; ++it)
 			ret.push_back(it->second);
@@ -198,10 +194,11 @@ namespace
 		};
 		OutputCmdHelp(command);
 		auto related = RelatedCommands(command);
-		for (const Command relatedCmd : related)
+		for (const std::pair<Command, is_mandatory> relatedCmd : related)
 		{
-			s << " " << CMD_PREFIX << GetCommandStr(relatedCmd);
-			OutputCmdHelp(relatedCmd);
+			s << " " << (relatedCmd.second ? "" : OPTIONAL_START) << CMD_PREFIX << GetCommandStr(relatedCmd.first);
+			OutputCmdHelp(relatedCmd.first);
+			s << (relatedCmd.second ? "" : OPTIONAL_END);
 		}
 		s << CMD_END;
 		return s.str();
@@ -209,7 +206,9 @@ namespace
 
 	void PrintHelp()
 	{
-		std::cout << "Usage: " << std::endl;
+		std::cout << "Usage: " << CMD_START << CMD_PREFIX << "'command'" << CMD_END
+			<< " <'parameter'> " << OPTIONAL_START << "'optional parameter'" << OPTIONAL_END
+			<< " " << OPTIONAL_START << CMD_START << CMD_PREFIX << "'optional command'" << CMD_END << OPTIONAL_END << std::endl;
 		for (const Command cmd : COMMANDS)
 		{
 			std::cout << "     " << GetCommandHelp(cmd) << std::endl;
@@ -237,6 +236,17 @@ namespace
 		{
 			std::cerr << "Unknown command: " << command << std::endl;
 		}
+	}
+
+	bool IsCommand(std::string& input)
+	{
+		const size_t pos = input.find(CMD_PREFIX);
+		if (pos != std::string::npos && input.size() > CMD_PREFIX.size())
+		{
+			input = input.substr(pos + CMD_PREFIX.size());
+			return true;
+		}
+		return false;
 	}
 }
 
