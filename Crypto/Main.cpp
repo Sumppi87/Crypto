@@ -252,6 +252,155 @@ namespace
 		}
 		return false;
 	}
+
+	void ReadParameters(std::list<std::string>& params, const int index, const int argc, char** argv)
+	{
+		for (auto i = index; i < argc; ++i)
+		{
+			std::string param(argv[i]);
+			if (IsCommand(param))
+			{
+				break;
+			}
+			params.push_back(param);
+		}
+	}
+
+	struct CommandData
+	{
+		CmdInfo cmdInfo;
+		std::list<std::string> cmdParams;
+	};
+
+	struct Commands
+	{
+		CommandData primaryCmd;
+		std::map<Command, CommandData> otherCmds;
+	};
+
+	bool ValidateCommands(const Commands& commands)
+	{
+		bool ret = true;
+		// Check that all required commands can be found
+		for (auto iter = commands.primaryCmd.cmdInfo.relatedCommands.begin()
+				; iter != commands.primaryCmd.cmdInfo.relatedCommands.end()
+				; ++iter)
+		{
+			const Command c = (*iter).first;
+			const CmdInfo::is_mandatory required = (*iter).second;
+			if (required == false)
+				continue; // no need to check the existance of optional parameters
+
+			auto requiredCmdIter = commands.otherCmds.find(c);
+			if (requiredCmdIter == commands.otherCmds.end())
+			{
+				// Primary command is missing a mandatory support command
+				std::cerr << "Incorrectly formatted command sequence" << std::endl;
+				PrintHelp();
+				ret = false;
+				break;
+			}
+		}
+
+		// Also check that no unexpected commands are present
+		for (auto iter = commands.otherCmds.begin(); iter != commands.otherCmds.end(); ++iter)
+		{
+			auto relatedCmd = commands.primaryCmd.cmdInfo.relatedCommands.find((*iter).second.cmdInfo.command);
+			if (relatedCmd == commands.primaryCmd.cmdInfo.relatedCommands.end())
+			{
+				// Unexpected command
+				std::cerr << "Incorrectly formatted command sequence" << std::endl;
+				PrintHelp();
+				ret = false;
+				break;
+			}
+		}
+		return ret;
+	}
+
+	bool ReadCommands(Commands& commands, const int argc, char** argv)
+	{
+		if (argc < 2)
+			return false;
+
+		bool ret = true;
+
+		bool primaryCmdFound = false;
+
+		for (auto i = 1; i < argc; ++i)
+		{
+			std::string input(argv[i]);
+			if (IsCommand(input))
+			{
+				CommandData cmdData;
+				auto iter = COMMAND_MAP.find(input);
+				if (iter != COMMAND_MAP.end() && GetCommandInfo((*iter).second, cmdData.cmdInfo))
+				{
+					if (primaryCmdFound && cmdData.cmdInfo.isPrimaryCommand)
+					{
+						std::cerr << "Incorrectly formatted command sequence" << std::endl;
+						PrintHelp();
+						ret = false;
+						break;
+					}
+					else if (!primaryCmdFound && cmdData.cmdInfo.isPrimaryCommand)
+					{
+						primaryCmdFound = true;
+					}
+
+					// read possible parameters
+					ReadParameters(cmdData.cmdParams, i + 1, argc, argv);
+					if (cmdData.cmdInfo.allowedParamCount.find((uint8_t)cmdData.cmdParams.size()) == cmdData.cmdInfo.allowedParamCount.end())
+					{
+						// Invalid amount of parameters
+						std::cerr << "Invalid command, invalid parameter count" << std::endl;
+						PrintDetailedHelp(input);
+						ret = false;
+						break;
+					}
+
+					if (cmdData.cmdInfo.isPrimaryCommand)
+						commands.primaryCmd = cmdData;
+					else if (commands.otherCmds.find(cmdData.cmdInfo.command) == commands.otherCmds.end())
+						commands.otherCmds.emplace(cmdData.cmdInfo.command, cmdData);
+					else
+					{
+						std::cerr << "Incorrectly formatted command sequence" << std::endl;
+						PrintHelp();
+						ret = false;
+						break;
+					}
+					i += (int)cmdData.cmdParams.size();
+				}
+				else
+				{
+					std::cerr << "Unknown command: " << input << std::endl;
+					PrintHelp();
+					ret = false;
+					break;
+				}
+			}
+			else
+			{
+				std::cerr << "Incorrectly formatted command sequence" << std::endl;
+				PrintHelp();
+
+				ret = false;
+				break;
+			}
+		}
+		if (primaryCmdFound == false)
+		{
+			ret = false;
+			std::cerr << "Incorrectly formatted command sequence" << std::endl;
+			PrintHelp();
+		}
+		else
+		{
+			ret = ValidateCommands(commands);
+		}
+		return ret;
+	}
 }
 
 bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
