@@ -1,7 +1,6 @@
 #pragma once
 #include "Crypto.h"
 #include <map>
-#include <list>
 #include <vector>
 #include <unordered_set>
 #include <string>
@@ -53,7 +52,7 @@ struct CommandData
 		{
 		}
 
-		Parameter(uint16_t val)
+		Parameter(uint64_t val)
 			: type(ParamType::THREAD_COUNT)
 			, uValue(val)
 			, kValue(Crypto::KeySize::KS_64)
@@ -78,14 +77,17 @@ struct CommandData
 		ParamType type;
 		struct
 		{
-			uint16_t uValue;
+			//! \brief Numerical parameter, e.g. thread count
+			uint64_t uValue;
+			//! \brief Keysize
 			Crypto::KeySize kValue;
+			//! \brief string-value, e.g. filepath/name
 			std::string sValue;
 		};
 	};
 
 	CmdInfo cmdInfo;
-	std::list<Parameter> cmdParams;
+	std::vector<Parameter> cmdParams;
 };
 
 struct Commands
@@ -104,6 +106,8 @@ public:
 
 	bool ReadCommands(Commands& commands);
 
+	static void PrintDetailedHelp(const std::string& command);
+
 private:
 	static bool ValidateCommands(const Commands& commands);
 
@@ -113,12 +117,10 @@ private:
 
 	static std::string GetCommandHelp(const Command command);
 
-	static void PrintDetailedHelp(const std::string command);
-
 	static bool IsCommand(std::string& input);
 
 	bool ReadParameters(const CmdInfo& cmdInfo,
-						std::list<CommandData::Parameter>& params,
+						std::vector<CommandData::Parameter>& params,
 						const std::vector<std::string>& strParams);
 
 	void ReadParameters(std::vector<std::string>& params, const int index);
@@ -127,5 +129,7 @@ private:
 private:
 	const int m_argc;
 	char** m_argv;
+
+	CommandParser& operator=(const CommandParser&) = delete;
 };
 

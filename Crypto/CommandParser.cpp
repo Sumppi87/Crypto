@@ -150,7 +150,7 @@ void CommandParser::PrintHelp()
 		std::cout << "       " << GetCommandHelp(cmd) << std::endl;
 	}
 }
-void CommandParser::PrintDetailedHelp(const std::string command)
+void CommandParser::PrintDetailedHelp(const std::string& command)
 {
 	auto iter = COMMAND_MAP.find(command);
 	if (iter != COMMAND_MAP.end())
@@ -285,13 +285,13 @@ bool CommandParser::ReadCommands(Commands& commands)
 			break;
 		}
 	}
-	if (primaryCmdFound == false)
+	if (!primaryCmdFound && ret)
 	{
 		ret = false;
 		std::cerr << "Incorrectly formatted command sequence" << std::endl;
 		PrintHelp();
 	}
-	else
+	else if (ret)
 	{
 		ret = ValidateCommands(commands);
 	}
@@ -368,7 +368,7 @@ bool CommandParser::IsCommand(std::string& input)
 }
 
 bool CommandParser::ReadParameters(const CmdInfo& cmdInfo,
-								   std::list<CommandData::Parameter>& params,
+								   std::vector<CommandData::Parameter>& params,
 								   const std::vector<std::string>& strParams)
 {
 	bool ret = true;
@@ -387,7 +387,7 @@ bool CommandParser::ReadParameters(const CmdInfo& cmdInfo,
 	else
 	{
 		const std::vector<ParamType> paramTypes = (*paramsIter).second;
-		for (int i = 0; i < paramTypes.size(); ++i)
+		for (size_t i = 0; i < paramTypes.size(); ++i)
 		{
 			const ParamType type = paramTypes.at(i);
 			const std::string param = strParams.at(i);
@@ -412,7 +412,7 @@ bool CommandParser::ReadParameters(const CmdInfo& cmdInfo,
 					{
 						if (value > 0 && value <= std::thread::hardware_concurrency())
 						{
-							params.push_back(CommandData::Parameter((uint16_t)value));
+							params.push_back(CommandData::Parameter(value));
 							isValid = true;
 						}
 					}
@@ -428,8 +428,9 @@ bool CommandParser::ReadParameters(const CmdInfo& cmdInfo,
 				}
 				break;
 			}
+			case ParamType::INVALID:
+				break;
 			default:
-				isValid = false;
 				break;
 			}
 

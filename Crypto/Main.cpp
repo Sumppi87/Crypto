@@ -19,52 +19,13 @@
 
 namespace
 {
-	std::string GetFileName(const Crypto::KeySize keysize, const bool isPrivateKey)
+	std::string GetFileName(const std::string& filepath, const bool isPrivateKey)
 	{
-		return "key_" + std::to_string(static_cast<unsigned int>(keysize)) + (isPrivateKey ? ".ppk" : ".pub");
-	}
-
-	std::string GetFileName(const bool isPrivateKey)
-	{
-		return std::string("key") + std::string(isPrivateKey ? ".ppk" : ".pub");
-	}
-
-	bool GetKeySize(const std::string& str, Crypto::KeySize& keySize)
-	{
-		auto num = std::stoi(str);
-		bool retVal = true;
-		switch (num)
-		{
-		case 64:
-			keySize = Crypto::KeySize::KS_64;
-			break;
-		case 128:
-			keySize = Crypto::KeySize::KS_128;
-			break;
-		case 256:
-			keySize = Crypto::KeySize::KS_256;
-			break;
-		case 512:
-			keySize = Crypto::KeySize::KS_512;
-			break;
-		case 1024:
-			keySize = Crypto::KeySize::KS_1024;
-			break;
-		case 2048:
-			keySize = Crypto::KeySize::KS_2048;
-			break;
-		case 3072:
-			keySize = Crypto::KeySize::KS_3072;
-			break;
-		default:
-			retVal = false;
-			break;
-		}
-		return retVal;
+		return filepath + std::string(isPrivateKey ? ".ppk" : ".pub");
 	}
 }
 
-bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
+bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys, const std::string& filepath)
 {
 	char* bufferPub = new char[BUFFER_SIZE_PUBLIC(pKeys->keySize)];
 	memset(bufferPub, 0, BUFFER_SIZE_PUBLIC(pKeys->keySize));
@@ -74,14 +35,14 @@ bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
 	uint16_t writtenPriv = 0;
 	uint16_t writtenPub = 0;
 	const Crypto::CryptoRet ret = Crypto::ExportAsymmetricKeys(pKeys,
-		Crypto::DataOut(bufferPriv, BUFFER_SIZE_PRIVATE(pKeys->keySize)), &writtenPriv,
-		Crypto::DataOut(bufferPub, BUFFER_SIZE_PUBLIC(pKeys->keySize)), &writtenPub);
+															   Crypto::DataOut(bufferPriv, BUFFER_SIZE_PRIVATE(pKeys->keySize)), &writtenPriv,
+															   Crypto::DataOut(bufferPub, BUFFER_SIZE_PUBLIC(pKeys->keySize)), &writtenPub);
 
-	auto WriteKeyToFile = [](const char* buffer, const uint16_t bytes, const bool isPrivate)
+	auto WriteKeyToFile = [filepath](const char* buffer, const uint16_t bytes, const bool isPrivate)
 	{
 		bool ret = false;
 		std::ofstream stream;
-		if (OpenForWrite(GetFileName(isPrivate), stream)
+		if (OpenForWrite(GetFileName(filepath, isPrivate), stream)
 			&& !stream.bad())
 		{
 			stream.write(buffer, bytes);
@@ -99,7 +60,7 @@ bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
 		retVal = false;
 	}
 	else if (!WriteKeyToFile(bufferPriv, writtenPriv, true)
-		|| !WriteKeyToFile(bufferPub, writtenPub, false))
+			 || !WriteKeyToFile(bufferPub, writtenPub, false))
 	{
 		std::cerr << "Error in writing keys to file" << std::endl;
 		retVal = false;
@@ -112,10 +73,10 @@ bool ExportKeyToFile(Crypto::AsymmetricKeys* pKeys)
 }
 
 bool EncryptDecrypt(const bool encrypt,
-	Crypto::AsymmetricKeys* pKeys,
-	std::ifstream& in,
-	std::ofstream& out,
-	const bool inPlace = false)
+					Crypto::AsymmetricKeys* pKeys,
+					std::ifstream& in,
+					std::ofstream& out,
+					const bool inPlace = false)
 {
 	std::filebuf* pbuf = in.rdbuf();
 	if (pbuf == nullptr)
@@ -165,12 +126,12 @@ bool EncryptDecrypt(const bool encrypt,
 		if (encrypt)
 		{
 			status = Crypto::Encrypt(pKeys->pubKey, Crypto::DataIn(input, uint64_t(inputLen)),
-				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
+									 Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 		else
 		{
 			status = Crypto::Decrypt(pKeys->privKey, Crypto::DataIn(input, uint64_t(inputLen)),
-				Crypto::DataOut(output, blocks * blockSizeOutput), &len);
+									 Crypto::DataOut(output, blocks * blockSizeOutput), &len);
 		}
 
 		if (status == Crypto::CryptoRet::OK && len > 0U)
@@ -191,7 +152,7 @@ bool EncryptDecrypt(const bool encrypt,
 	return ret;
 }
 
-bool GenerateKeys(const Crypto::KeySize keySize)
+bool GenerateKeys(const Crypto::KeySize keySize, const std::string& filepath)
 {
 	bool ret = false;
 	std::cout << "Generating asymmetric keys... ";
@@ -209,7 +170,7 @@ bool GenerateKeys(const Crypto::KeySize keySize)
 
 		std::cout << "Done (" << keyGen_dur << "ms)" << std::endl;
 		std::cout << "Storing generated keys to file... ";
-		if (ExportKeyToFile(&keys))
+		if (ExportKeyToFile(&keys, filepath))
 		{
 			std::cout << "Done" << std::endl;
 			ret = true;
@@ -252,7 +213,7 @@ bool ImportKey(KeyType* key, const std::string& keyFile)
 	return ret == Crypto::CryptoRet::OK;
 }
 
-bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedFile)
+bool DecryptData(const std::string& keyFile, const std::string& fileToDecrypt, const std::string& decryptedFile)
 {
 	bool ret = false;
 	Crypto::AsymmetricKeys keys;
@@ -260,7 +221,7 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 	std::ofstream out;
 
 	std::cout << "Importing asymmetric private key... ";
-	if (!ImportKey(&keys.privKey, GetFileName(true)))
+	if (!ImportKey(&keys.privKey, keyFile))
 	{
 		std::cerr << "Error!" << std::endl;
 	}
@@ -311,7 +272,7 @@ bool DecryptData(const std::string& fileToDecrypt, const std::string& decryptedF
 	return ret;
 }
 
-bool EncryptData(const std::string& fileToEncrypt, const std::string& encryptedFile)
+bool EncryptData(const std::string& keyFile, const std::string& fileToEncrypt, const std::string& encryptedFile)
 {
 	bool ret = false;
 	Crypto::AsymmetricKeys keys;
@@ -319,7 +280,7 @@ bool EncryptData(const std::string& fileToEncrypt, const std::string& encryptedF
 	std::ofstream out;
 
 	std::cout << "Importing asymmetric public key... ";
-	if (!ImportKey(&keys.pubKey, GetFileName(false)))
+	if (!ImportKey(&keys.pubKey, keyFile))
 	{
 		std::cerr << "Error!" << std::endl;
 	}
@@ -377,49 +338,64 @@ int main(int argc, char** argv)
 	{
 		return -1;
 	}
-	else if (std::string(argv[1]) == "create_keys")
+
+	bool ret = true;
+	const auto primaryParams = commands.primaryCmd.cmdParams;
+
+	auto threadCountIter = commands.otherCmds.find(Command::THREAD_COUNT);
+	if (threadCountIter != commands.otherCmds.end())
 	{
-		Crypto::KeySize keySize;
-		if (argc < 2)
+		const uint32_t threads = (*threadCountIter).second.cmdParams.at(0).uValue;
+		Crypto::SetThreadCount(threads);
+	}
+
+	switch (commands.primaryCmd.cmdInfo.command)
+	{
+	case Command::HELP:
+		if (commands.primaryCmd.cmdParams.size() == 0)
 		{
-			std::cerr << "Error, no keysize provided" << std::endl;
-		}
-		else if (GetKeySize(argv[2], keySize))
-		{
-			return GenerateKeys(keySize);
+			CommandParser::PrintHelp();
 		}
 		else
-			std::cerr << "Error, invalid keysize" << std::endl;
-	}
-	else if (std::string(argv[1]) == "encrypt")
-		return EncryptData("test.cpp", "test.cpp.enc");
-	else if (std::string(argv[1]) == "decrypt")
-		return DecryptData("test.cpp.enc", "test_decrypted.cpp");
-	else if (std::string(argv[1]) == "test")
-	{
-		Crypto::KeySize keySize;
-		if (GetKeySize(argv[2], keySize))
 		{
-			BigInt sum;
-			for (auto i = 0; i < 25; ++i)
-			{
-				Crypto::AsymmetricKeys keys;
-
-				const auto start = std::chrono::high_resolution_clock::now();
-				Crypto::CreateAsymmetricKeys(keySize, &keys);
-				const auto end = std::chrono::high_resolution_clock::now();
-				const auto keyGen_start = std::chrono::high_resolution_clock::now();
-				const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-
-				std::cout << "Key generation took: " << duration << " ms" << std::endl;
-
-				sum = sum + duration;
-				Crypto::DeleteAsymmetricKeys(&keys);
-			}
-			std::cout << "Key generation took (avg) : " << (sum / 25).ToDec() << " ms" << std::endl;
+			CommandParser::PrintDetailedHelp(primaryParams.front().sValue);
 		}
+		break;
+	case Command::GENERATE_KEYS:
+		ret = GenerateKeys(primaryParams.at(0).kValue, primaryParams.at(1).sValue);
+		break;
+	case Command::ENCRYPT:
+	{
+		auto subCmdIter = commands.otherCmds.find(Command::LOAD_PUBLIC_KEY);
+		if (subCmdIter == commands.otherCmds.end())
+		{
+			std::cerr << "Invalid LOAD_PUBLIC_KEY command!";
+			break;
+		}
+		const CommandData data = (*subCmdIter).second;
+		ret = EncryptData(data.cmdParams.at(0).sValue, primaryParams.at(0).sValue, primaryParams.at(1).sValue);
+		break;
 	}
-	else
-		std::cerr << "Error, unknown command" << std::endl;
-	return -1;
+	case Command::DECRYPT:
+	{
+		auto subCmdIter = commands.otherCmds.find(Command::LOAD_PRIVATE_KEY);
+		if (subCmdIter == commands.otherCmds.end())
+		{
+			std::cerr << "Invalid LOAD_PRIVATE_KEY command!";
+			break;
+		}
+		const CommandData data = (*subCmdIter).second;
+		ret = DecryptData(data.cmdParams.at(0).sValue, primaryParams.at(0).sValue, primaryParams.at(1).sValue);
+		break;
+	}
+	case Command::LOAD_PRIVATE_KEY:
+	case Command::LOAD_PUBLIC_KEY:
+	case Command::THREAD_COUNT:
+		ret = false;
+		break;
+	default:
+		break;
+	}
+
+	return ret == true ? 1 : -1;
 }

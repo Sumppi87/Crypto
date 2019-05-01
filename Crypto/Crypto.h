@@ -143,6 +143,11 @@ public:
 	// !\note Imported key must be destroyed with DeleteKey
 	static CryptoRet ImportKey(PrivateKey* pPrivateKey, const DataIn privData);
 
+	// !\Brief Sets how many threads to use in threadable operations
+	// !\param[in] maxThreads How many threads to use
+	// !\return CryptoRet::OK if the limit was set
+	static void SetThreadCount(const uint32_t maxThreads);
+
 //!
 //! Encryption/decryption related function
 //!
