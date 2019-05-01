@@ -1,5 +1,4 @@
 #include "CommandParser.h"
-#include <list>
 #include <thread>
 #include <sstream>
 #include <iostream>
@@ -27,25 +26,32 @@ namespace
 
 	const std::map<Command, CmdInfo> CMD_INFO =
 	{
-		{Command::HELP, {Command::HELP, true, {0, 1}, {}, "{<detailed help about command>}", "This help"}},
-		{Command::GENERATE_KEYS, {Command::GENERATE_KEYS, true, {2}, {{Command::THREAD_COUNT, false}},
+	{Command::HELP, {Command::HELP, true, { {0, {}}, {1, {ParamType::STRING}} }, {}, "{<detailed help about command>}", "This help"}},
+
+
+	{Command::GENERATE_KEYS, {Command::GENERATE_KEYS, true, { {2, {ParamType::KEYSIZE, ParamType::STRING}} }, {{Command::THREAD_COUNT, false}},
 			"<key width> <filename/path>",
 			"<specify a key length to use, e.g. 1024> <filename to store the keys, e.g. C:/Data/key"
 			" (public key is exported as *.pub and private *.ppk)>"}},
-		{Command::LOAD_PRIVATE_KEY, {Command::LOAD_PRIVATE_KEY, false, {1}, {},
+
+	{Command::LOAD_PRIVATE_KEY, {Command::LOAD_PRIVATE_KEY, false, { {1, {ParamType::STRING}} }, {},
 			"<filename/path>",
 			"<file from where to load a private key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"}},
-		{Command::LOAD_PUBLIC_KEY, {Command::LOAD_PUBLIC_KEY, false, {1}, {},
+
+	{Command::LOAD_PUBLIC_KEY, {Command::LOAD_PUBLIC_KEY, false, { {1, {ParamType::STRING}} }, {},
 			"<filename/path>",
 			"<file from where to load a public key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"}},
-		{Command::ENCRYPT, {Command::ENCRYPT, true, {2}, {{Command::LOAD_PUBLIC_KEY, true}, {Command::THREAD_COUNT, false}},
+
+	{Command::ENCRYPT, {Command::ENCRYPT, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PUBLIC_KEY, true}, {Command::THREAD_COUNT, false}},
 			"<file to encrypt> <encrypted file>",
 			"<file to encrypt, can be absolute or relative filepath> <encrypted file, can be absolute or relative filepath>"}},
-		{Command::DECRYPT, {Command::DECRYPT, true, {2}, {{Command::LOAD_PRIVATE_KEY, true}, {Command::THREAD_COUNT, false}},
+
+	{Command::DECRYPT, {Command::DECRYPT, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PRIVATE_KEY, true}, {Command::THREAD_COUNT, false}},
 			"<file to decrypt> <decrypted file>",
 			"<file to decrypt, can be absolute or relative filepath> <decrypted file, can be absolute or relative filepath>"}},
 #if defined(USE_THREADS)
-		{Command::THREAD_COUNT, {Command::THREAD_COUNT, false, {1}, {}, []()
+
+	{Command::THREAD_COUNT, {Command::THREAD_COUNT, false, { {1, {ParamType::THREAD_COUNT}} }, {}, []()
 			{
 				std::stringstream s;
 				s << "<Threads [1..." << std::thread::hardware_concurrency() << "]>";
@@ -71,6 +77,57 @@ namespace
 		std::make_pair("threads", Command::THREAD_COUNT)
 #endif
 	};
+
+	bool StringToNumber(const std::string& s, uint64_t& val)
+	{
+		bool ret = false;
+		try
+		{
+			std::string::size_type size;
+			val = std::stoull(s, &size);
+			if (s.size() == size)
+			{
+				ret = true;
+			}
+		}
+		catch (...)
+		{
+		}
+		return ret;
+	}
+
+	bool GetKeySize(const uint64_t value, Crypto::KeySize& keySize)
+	{
+		bool retVal = true;
+		switch (value)
+		{
+		case 64:
+			keySize = Crypto::KeySize::KS_64;
+			break;
+		case 128:
+			keySize = Crypto::KeySize::KS_128;
+			break;
+		case 256:
+			keySize = Crypto::KeySize::KS_256;
+			break;
+		case 512:
+			keySize = Crypto::KeySize::KS_512;
+			break;
+		case 1024:
+			keySize = Crypto::KeySize::KS_1024;
+			break;
+		case 2048:
+			keySize = Crypto::KeySize::KS_2048;
+			break;
+		case 3072:
+			keySize = Crypto::KeySize::KS_3072;
+			break;
+		default:
+			retVal = false;
+			break;
+		}
+		return retVal;
+	}
 }
 
 CommandParser::CommandParser(const int argc, char** argv)
@@ -188,11 +245,11 @@ bool CommandParser::ReadCommands(Commands& commands)
 				}
 
 				// read possible parameters
-				ReadParameters(cmdData.cmdParams, i + 1);
-				if (cmdData.cmdInfo.allowedParamCount.find((uint8_t)cmdData.cmdParams.size()) == cmdData.cmdInfo.allowedParamCount.end())
+				std::vector<std::string> params;
+				ReadParameters(params, i + 1);
+				if (!ReadParameters(cmdData.cmdInfo, cmdData.cmdParams, params))
 				{
-					// Invalid amount of parameters
-					std::cerr << "Invalid command, invalid parameter count" << std::endl;
+					// Invalid parameters
 					PrintDetailedHelp(input);
 					ret = false;
 					break;
@@ -310,15 +367,106 @@ bool CommandParser::IsCommand(std::string& input)
 	return false;
 }
 
-void CommandParser::ReadParameters(std::list<std::string>& params, const int index)
+bool CommandParser::ReadParameters(const CmdInfo& cmdInfo,
+								   std::list<CommandData::Parameter>& params,
+								   const std::vector<std::string>& strParams)
+{
+	bool ret = true;
+	if (params.size() > UINT8_MAX)
+	{
+		std::cerr << "Invalid amount of parameters" << std::endl;
+		return false;
+	}
+	auto paramsIter = cmdInfo.allowedParams.find((uint8_t)strParams.size());
+	if (paramsIter == cmdInfo.allowedParams.end())
+	{
+		// Correct amount of parameters not found
+		std::cerr << "Invalid amount of parameters" << std::endl;
+		ret = false;
+	}
+	else
+	{
+		const std::vector<ParamType> paramTypes = (*paramsIter).second;
+		for (int i = 0; i < paramTypes.size(); ++i)
+		{
+			const ParamType type = paramTypes.at(i);
+			const std::string param = strParams.at(i);
+			bool isValid = false;
+			switch (type)
+			{
+			case ParamType::STRING:
+				if (param.size() > 0)
+				{
+					// Non-emptry string, assume to be valid
+					params.push_back(CommandData::Parameter(param));
+					isValid = true;
+				}
+				break;
+			case ParamType::THREAD_COUNT:
+			case ParamType::KEYSIZE:
+			{
+				uint64_t value = 0;
+				if (StringToNumber(param, value))
+				{
+					if (type == ParamType::THREAD_COUNT)
+					{
+						if (value > 0 && value <= std::thread::hardware_concurrency())
+						{
+							params.push_back(CommandData::Parameter((uint16_t)value));
+							isValid = true;
+						}
+					}
+					else
+					{
+						Crypto::KeySize keySize;
+						if (GetKeySize(value, keySize))
+						{
+							params.push_back(CommandData::Parameter(keySize));
+							isValid = true;
+						}
+					}
+				}
+				break;
+			}
+			default:
+				isValid = false;
+				break;
+			}
+
+			if (!isValid)
+			{
+				std::cerr << "Invalid parameter: " << param << std::endl;
+				ret = false;
+			}
+		}
+	}
+	return ret;
+}
+
+void CommandParser::ReadParameters(std::vector<std::string>& params, const int index)
 {
 	for (auto i = index; i < m_argc; ++i)
 	{
-		std::string param(m_argv[i]);
-		if (IsCommand(param))
+		std::string param;
+		if (!ReadParameter(param, i))
 		{
 			break;
 		}
 		params.push_back(param);
 	}
+}
+
+bool CommandParser::ReadParameter(std::string& param, const int index)
+{
+	bool ret = false;
+	if (index < m_argc)
+	{
+		std::string tmp(m_argv[index]);
+		if (!IsCommand(tmp))
+		{
+			param = tmp;
+			ret = true;
+		}
+	}
+	return ret;
 }

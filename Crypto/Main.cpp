@@ -373,8 +373,7 @@ bool EncryptData(const std::string& fileToEncrypt, const std::string& encryptedF
 int main(int argc, char** argv)
 {
 	Commands commands;
-	CommandParser parser(argc, argv);
-	if (!parser.ReadCommands(commands))
+	if (!CommandParser(argc, argv).ReadCommands(commands))
 	{
 		return -1;
 	}

@@ -1,6 +1,8 @@
 #pragma once
+#include "Crypto.h"
 #include <map>
 #include <list>
+#include <vector>
 #include <unordered_set>
 #include <string>
 
@@ -15,11 +17,22 @@ enum class Command
 	THREAD_COUNT,
 };
 
+enum class ParamType
+{
+	INVALID = -1,
+	STRING, // Filepath, commands etc
+	THREAD_COUNT,
+	KEYSIZE
+};
+
 struct CmdInfo
 {
 	Command command;
+
 	bool isPrimaryCommand;
-	std::unordered_set<uint8_t> allowedParamCount;
+
+	typedef uint8_t NumOfParams;
+	std::map<NumOfParams, std::vector<ParamType>> allowedParams;
 
 	typedef bool is_mandatory;
 	std::map<Command, is_mandatory> relatedCommands;
@@ -31,8 +44,48 @@ struct CmdInfo
 
 struct CommandData
 {
+	struct Parameter
+	{
+		Parameter()
+			: type(ParamType::INVALID)
+			, uValue(0)
+			, kValue(Crypto::KeySize::KS_64)
+		{
+		}
+
+		Parameter(uint16_t val)
+			: type(ParamType::THREAD_COUNT)
+			, uValue(val)
+			, kValue(Crypto::KeySize::KS_64)
+		{
+		}
+
+		Parameter(const Crypto::KeySize keySize)
+			: type(ParamType::KEYSIZE)
+			, uValue(0)
+			, kValue(keySize)
+		{
+		}
+
+		Parameter(const std::string& s)
+			: type(ParamType::STRING)
+			, uValue(0)
+			, kValue(Crypto::KeySize::KS_64)
+			, sValue(s)
+		{
+		}
+
+		ParamType type;
+		struct
+		{
+			uint16_t uValue;
+			Crypto::KeySize kValue;
+			std::string sValue;
+		};
+	};
+
 	CmdInfo cmdInfo;
-	std::list<std::string> cmdParams;
+	std::list<Parameter> cmdParams;
 };
 
 struct Commands
@@ -64,7 +117,12 @@ private:
 
 	static bool IsCommand(std::string& input);
 
-	void ReadParameters(std::list<std::string>& params, const int index);
+	bool ReadParameters(const CmdInfo& cmdInfo,
+						std::list<CommandData::Parameter>& params,
+						const std::vector<std::string>& strParams);
+
+	void ReadParameters(std::vector<std::string>& params, const int index);
+	bool ReadParameter(std::string& param, const int index);
 
 private:
 	const int m_argc;
