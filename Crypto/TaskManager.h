@@ -38,8 +38,9 @@ private:
 class TaskManager
 {
 public:
+	static uint32_t THREADS;
 	static void AddTask(Task* pTask);
-	static void ExecuteFunction(const std::function<void()>& func, const uint8_t threadCount = OptimalThreadCount());
+	static void ExecuteFunction(const std::function<void()>& func, const uint32_t threadCount = THREADS);
 	static unsigned int OptimalThreadCount();
 
 	~TaskManager();

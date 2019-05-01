@@ -5,6 +5,7 @@
 #include <list>
 #include <algorithm>
 
+uint32_t TaskManager::THREADS = std::thread::hardware_concurrency();
 TaskManager TaskManager::TASK_MANAGER;
 
 Task::Task(const std::function<void()>& func)
@@ -46,7 +47,7 @@ void TaskManager::AddTask(Task* pTask)
 	TASK_MANAGER.m_taskCondition.notify_one();
 }
 
-void TaskManager::ExecuteFunction(const std::function<void()>& func, const uint8_t threadCount)
+void TaskManager::ExecuteFunction(const std::function<void()>& func, const uint32_t threadCount)
 {
 	std::vector<Task*> tasks;
 	for (uint32_t i = 0; i < threadCount; ++i)
@@ -65,7 +66,7 @@ void TaskManager::ExecuteFunction(const std::function<void()>& func, const uint8
 
 unsigned int TaskManager::OptimalThreadCount()
 {
-	return std::thread::hardware_concurrency();
+	return THREADS;
 }
 
 TaskManager::TaskManager()

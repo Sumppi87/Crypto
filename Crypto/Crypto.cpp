@@ -278,6 +278,19 @@ Crypto::CryptoRet Crypto::ImportKey(PrivateKey* pPrivateKey, const DataIn privDa
 	return ret;
 }
 
+void Crypto::SetThreadCount(const uint32_t maxThreads)
+{
+#if defined(USE_THREADS)
+	const auto max = std::thread::hardware_concurrency();
+	if (maxThreads > max)
+		TaskManager::THREADS = max;
+	else if (maxThreads < 1)
+		TaskManager::THREADS = 1;
+	else
+		TaskManager::THREADS = maxThreads;
+#endif
+}
+
 void Crypto::NeededBufferSizeForExport(const KeySize keySize,
 	uint16_t* pPrivateKeyBytes,
 	uint16_t* pPublicKeyBytes)

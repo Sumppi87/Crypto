@@ -158,6 +158,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="BigInt.h" />
+    <ClInclude Include="CommandParser.h" />
     <ClInclude Include="Crypto.h" />
     <ClInclude Include="CryptoUtils.h" />
     <ClInclude Include="FileAccess.h" />
@@ -165,6 +166,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BigInt.cpp" />
+    <ClCompile Include="CommandParser.cpp" />
     <ClCompile Include="Crypto.cpp" />
     <ClCompile Include="CryptoUtils.cpp" />
     <ClCompile Include="Main.cpp" />
