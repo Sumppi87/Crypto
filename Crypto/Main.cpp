@@ -13,6 +13,7 @@
 #include <chrono>
 #include <functional>
 #include <map>
+#include <unordered_set>
 #include "safeint.h"
 
 namespace
@@ -84,28 +85,51 @@ namespace
 #endif
 	};
 
-	const std::multimap<Command, uint8_t> ALLOWED_PARAM_COUNT =
+	struct CmdInfo
 	{
-		{Command::HELP, 0},
-		{Command::HELP, 1},
-		{Command::GENERATE_KEYS, 2},
-		{Command::LOAD_PRIVATE_KEY, 1},
-		{Command::LOAD_PUBLIC_KEY, 1},
-		{Command::ENCRYPT, 2},
-		{Command::DECRYPT, 1},
-		{Command::THREAD_COUNT, 1},
+		Command command;
+		bool isPrimaryCommand;
+		std::unordered_set<uint8_t> allowedParamCount;
+
+		typedef bool is_mandatory;
+		std::map<Command, is_mandatory> relatedCommands;
+
+		std::string help;
+
+		std::string detailedHelp;
 	};
 
-	typedef bool is_mandatory;
-	const std::multimap<Command, std::pair<Command, is_mandatory>> RELATED_COMMMANDS =
+	const std::map<Command, CmdInfo> CMD_INFO =
 	{
-		{Command::DECRYPT, {Command::LOAD_PRIVATE_KEY, true}},
-		{Command::ENCRYPT, {Command::LOAD_PUBLIC_KEY, true}},
-
+		{Command::HELP, {Command::HELP, true, {0, 1}, {}, "{<detailed help about command>}", "This help"}},
+		{Command::GENERATE_KEYS, {Command::GENERATE_KEYS, true, {2}, {{Command::THREAD_COUNT, false}},
+			"<key width> <filename/path>",
+			"<specify a key length to use, e.g. 1024> <filename to store the keys, e.g. C:/Data/key"
+			" (public key is exported as *.pub and private *.ppk)>"}},
+		{Command::LOAD_PRIVATE_KEY, {Command::LOAD_PRIVATE_KEY, false, {1}, {},
+			"<filename/path>",
+			"<file from where to load a private key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"}},
+		{Command::LOAD_PUBLIC_KEY, {Command::LOAD_PUBLIC_KEY, false, {1}, {},
+			"<filename/path>",
+			"<file from where to load a public key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"}},
+		{Command::ENCRYPT, {Command::ENCRYPT, true, {2}, {{Command::LOAD_PUBLIC_KEY, true}, {Command::THREAD_COUNT, false}},
+			"<file to encrypt> <encrypted file>",
+			"<file to encrypt, can be absolute or relative filepath> <encrypted file, can be absolute or relative filepath>"}},
+		{Command::DECRYPT, {Command::DECRYPT, true, {2}, {{Command::LOAD_PRIVATE_KEY, true}, {Command::THREAD_COUNT, false}},
+			"<file to decrypt> <decrypted file>",
+			"<file to decrypt, can be absolute or relative filepath> <decrypted file, can be absolute or relative filepath>"}},
 #if defined(USE_THREADS)
-		{Command::GENERATE_KEYS, {Command::THREAD_COUNT, false}},
-		{Command::ENCRYPT, {Command::THREAD_COUNT, false}},
-		{Command::DECRYPT, {Command::THREAD_COUNT, false}},
+		{Command::THREAD_COUNT, {Command::THREAD_COUNT, false, {1}, {}, []()
+			{
+				std::stringstream s;
+				s << "<Threads [1..." << std::thread::hardware_concurrency() << "]>";
+				return s.str();
+			}(), []()
+			{
+				std::stringstream s;
+				s << "<how many threads to utilize in operations, must be between [1..." << std::thread::hardware_concurrency() << "]>";
+				return s.str();
+			}()}},
 #endif
 	};
 
@@ -120,36 +144,6 @@ namespace
 #if defined(USE_THREADS)
 		std::make_pair("threads", Command::THREAD_COUNT)
 #endif
-	};
-
-	const std::map<Command, std::string> COMMAND_HELP =
-	{
-		std::make_pair(Command::GENERATE_KEYS, "<key width> <filename/path>"),
-		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file>"),
-		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file>"),
-		std::make_pair(Command::ENCRYPT, "<file to encrypt> <encrypted file>"),
-		std::make_pair(Command::DECRYPT, "<file to decrypt> <decrypted file>"),
-		std::make_pair(Command::THREAD_COUNT, []()
-		{
-			std::stringstream s;
-			s << "<Threads [1..." << std::thread::hardware_concurrency() << "]>";
-			return s.str();
-		}())
-	};
-
-	const std::map<Command, std::string> COMMAND_DETAILED_HELP =
-	{
-		std::make_pair(Command::GENERATE_KEYS, "<specify a key length to use, e.g. 1024> <filename to store the keys, e.g. C:/Data/key (public key is exported as *.pub and private *.ppk)>"),
-		std::make_pair(Command::LOAD_PRIVATE_KEY, "<file from where to load a private key. Can be absolute or relative filepath, e.g. C:/Data/key.ppk>"),
-		std::make_pair(Command::LOAD_PUBLIC_KEY, "<file where to load a public key. Can be absolute or relative filepath, e.g. C:/Data/key.pub>"),
-		std::make_pair(Command::ENCRYPT, "<file to encrypt, can be absolute or relative filepath> <encrypted file, can be absolute or relative filepath>"),
-		std::make_pair(Command::DECRYPT, "<file to decrypt, can be absolute or relative filepath> <decrypted file, can be absolute or relative filepath>"),
-		std::make_pair(Command::THREAD_COUNT, []()
-		{
-			std::stringstream s;
-			s << "<how many threads to utilize in operations, must be between [1..." << std::thread::hardware_concurrency() << "]>";
-			return s.str();
-		}())
 	};
 
 	constexpr const char* CMD_START = "[";
@@ -168,37 +162,46 @@ namespace
 		return "Unkown command";
 	}
 
-	std::list<std::pair<Command, is_mandatory>> RelatedCommands(const Command cmd)
+	bool GetCommandInfo(const Command cmd, CmdInfo& info)
 	{
-		std::list<std::pair<Command, is_mandatory>> ret;
-		auto range = RELATED_COMMMANDS.equal_range(cmd);
-		for (auto it = range.first; it != range.second; ++it)
-			ret.push_back(it->second);
-		return ret;
+		auto iter = CMD_INFO.find(cmd);
+		if (iter != CMD_INFO.end())
+		{
+			info = (*iter).second;
+			return true;
+		}
+		return false;
 	}
 
 	std::string GetCommandHelp(const Command command)
 	{
+		CmdInfo info;
+		GetCommandInfo(command, info);
+
 		std::stringstream s;
 		s << CMD_START;
 		s << CMD_PREFIX << GetCommandStr(command);
 
 		auto OutputCmdHelp = [&s](const Command c)
 		{
-			auto iter = COMMAND_HELP.find(c);
-			if (iter != COMMAND_HELP.end())
+			CmdInfo info;
+			if (GetCommandInfo(c, info) && info.help.size() > 0)
 			{
 				s << " ";
-				s << (*iter).second;
+				s << info.help;
 			}
 		};
+
 		OutputCmdHelp(command);
-		auto related = RelatedCommands(command);
-		for (const std::pair<Command, is_mandatory> relatedCmd : related)
+
+		auto related = info.relatedCommands;
+		for (auto relatedIter = related.begin(); relatedIter != related.end(); ++relatedIter)
 		{
-			s << " " << (relatedCmd.second ? "" : OPTIONAL_START) << CMD_PREFIX << GetCommandStr(relatedCmd.first);
-			OutputCmdHelp(relatedCmd.first);
-			s << (relatedCmd.second ? "" : OPTIONAL_END);
+			const Command relatedCmd = (*relatedIter).first;
+			const CmdInfo::is_mandatory isMandatory = (*relatedIter).second;
+			s << " " << (isMandatory ? "" : OPTIONAL_START) << CMD_PREFIX << GetCommandStr(relatedCmd);
+			OutputCmdHelp(relatedCmd);
+			s << (isMandatory ? "" : OPTIONAL_END);
 		}
 		s << CMD_END;
 		return s.str();
@@ -211,7 +214,7 @@ namespace
 			<< " " << OPTIONAL_START << CMD_START << CMD_PREFIX << "'optional command'" << CMD_END << OPTIONAL_END << std::endl;
 		for (const Command cmd : COMMANDS)
 		{
-			std::cout << "     " << GetCommandHelp(cmd) << std::endl;
+			std::cout << "       " << GetCommandHelp(cmd) << std::endl;
 		}
 	}
 
@@ -224,12 +227,13 @@ namespace
 			std::cout << CMD_START;
 			std::cout << CMD_PREFIX << command;
 
-			auto iter_detail = COMMAND_DETAILED_HELP.find((*iter).second);
-			if (iter_detail != COMMAND_DETAILED_HELP.end())
+			CmdInfo info;
+			if (GetCommandInfo((*iter).second, info) && info.detailedHelp.size() > 0)
 			{
 				std::cout << " ";
-				std::cout << (*iter_detail).second;
+				std::cout << info.detailedHelp;
 			}
+
 			std::cout << CMD_END << std::endl;
 		}
 		else
