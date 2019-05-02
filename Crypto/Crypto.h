@@ -71,9 +71,18 @@ public:
 		INTERNAL_ERROR = -4
 	};
 
-//!
-//! Key management related function
-//!
+	enum class SHA3_Length : uint8_t
+	{
+		SHA3_224 = 28,
+		SHA3_256 = 32,
+		SHA3_384 = 48,
+		SHA3_512 = 64
+	};
+
+
+	//!
+	//! Key management related function
+	//!
 public:
 	// !\Brief Generates a random public/private keypair
 	// !\param[in] size Keysize

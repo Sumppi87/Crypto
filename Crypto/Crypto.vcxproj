@@ -162,6 +162,7 @@
     <ClInclude Include="Crypto.h" />
     <ClInclude Include="CryptoUtils.h" />
     <ClInclude Include="FileAccess.h" />
+    <ClInclude Include="SHA3.h" />
     <ClInclude Include="TaskManager.h" />
   </ItemGroup>
   <ItemGroup>
@@ -170,6 +171,7 @@
     <ClCompile Include="Crypto.cpp" />
     <ClCompile Include="CryptoUtils.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="SHA3.cpp" />
     <ClCompile Include="TaskManager.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
