@@ -70,7 +70,7 @@ public:
 
 	BigInt GreatestCommonDivisor(const BigInt& other, uint64_t& iters) const;
 
-	BigInt ModuloMultiplicativeInverse(const BigInt& M) const;;
+	BigInt ModuloMultiplicativeInverse(const BigInt& M) const;
 
 	void ExtendedEuclididan(const BigInt& b, BigInt& gcd, BigInt& x, BigInt& y) const;
 

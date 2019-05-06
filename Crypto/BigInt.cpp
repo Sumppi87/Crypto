@@ -356,9 +356,9 @@ BigInt::BigInt(const uint64_t val)
 }
 
 BigInt::BigInt(const int val)
-	: m_sign(val < 0U ? Sign::NEG : Sign::POS)
+	: m_sign(val < 0 ? Sign::NEG : Sign::POS)
 {
-	FromNum(val < 0U ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
+	FromNum(val < 0 ? uint32_t(-val) : (uint32_t)val, sizeof(uint32_t));
 }
 
 BigInt::BigInt(const int64_t val)

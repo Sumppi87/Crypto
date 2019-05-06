@@ -333,11 +333,11 @@ std::string CommandParser::GetCommandHelp(const Command command)
 
 	auto OutputCmdHelp = [&s](const Command c)
 	{
-		CmdInfo info;
-		if (GetCommandInfo(c, info) && info.help.size() > 0)
+		CmdInfo cmdInfo;
+		if (GetCommandInfo(c, cmdInfo) && cmdInfo.help.size() > 0)
 		{
 			s << " ";
-			s << info.help;
+			s << cmdInfo.help;
 		}
 	};
 

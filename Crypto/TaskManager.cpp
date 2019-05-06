@@ -99,7 +99,7 @@ Task* TaskManager::GetTask()
 {
 	std::unique_lock lock(m_tasksLock);
 
-	while (m_running && m_tasks.size() == 0)
+	while (m_running && m_tasks.empty())
 	{
 		m_taskCondition.wait(lock);
 	}
