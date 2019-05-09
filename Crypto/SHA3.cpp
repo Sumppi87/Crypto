@@ -144,13 +144,43 @@ private:
 			C[3] ^ RotateLeft(C[0], 1)
 		};
 
-		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+		/*for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
 		{
 			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
 			{
 				m_sponge[x][y] ^= D[x];
 			}
-		}
+		}*/
+		// Expand for-loops
+		m_sponge[0][0] ^= D[0];
+		m_sponge[0][1] ^= D[0];
+		m_sponge[0][2] ^= D[0];
+		m_sponge[0][3] ^= D[0];
+		m_sponge[0][4] ^= D[0];
+
+		m_sponge[1][0] ^= D[1];
+		m_sponge[1][1] ^= D[1];
+		m_sponge[1][2] ^= D[1];
+		m_sponge[1][3] ^= D[1];
+		m_sponge[1][4] ^= D[1];
+
+		m_sponge[2][0] ^= D[2];
+		m_sponge[2][1] ^= D[2];
+		m_sponge[2][2] ^= D[2];
+		m_sponge[2][3] ^= D[2];
+		m_sponge[2][4] ^= D[2];
+
+		m_sponge[3][0] ^= D[3];
+		m_sponge[3][1] ^= D[3];
+		m_sponge[3][2] ^= D[3];
+		m_sponge[3][3] ^= D[3];
+		m_sponge[3][4] ^= D[3];
+
+		m_sponge[4][0] ^= D[4];
+		m_sponge[4][1] ^= D[4];
+		m_sponge[4][2] ^= D[4];
+		m_sponge[4][3] ^= D[4];
+		m_sponge[4][4] ^= D[4];
 	};
 
 	inline void Rho()
@@ -170,15 +200,40 @@ private:
 		*/
 
 		const constexpr uint8_t OFFSETS[ITERATIONS]{ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 };
-		const constexpr uint8_t X_INDEXES[ITERATIONS] { 1, 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1 };
-		const constexpr uint8_t Y_INDEXES[ITERATIONS] { 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1, 1 };
+		const constexpr uint8_t X[ITERATIONS] { 1, 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1 };
+		const constexpr uint8_t Y[ITERATIONS] { 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1, 1 };
 
-		for (uint8_t t = 0; t < ITERATIONS; ++t)
+		/*for (uint8_t t = 0; t < ITERATIONS; ++t)
 		{
-			const uint8_t x = X_INDEXES[t];
-			const uint8_t y = Y_INDEXES[t];
+			const uint8_t x = X[t];
+			const uint8_t y = Y[t];
 			m_sponge[x][y] = RotateLeft(m_sponge[x][y], OFFSETS[t]);
-		};
+		};*/
+		// Expand the for-loop
+		m_sponge[X[0]][Y[0]] = RotateLeft(m_sponge[X[0]][Y[0]], OFFSETS[0]);
+		m_sponge[X[1]][Y[1]] = RotateLeft(m_sponge[X[1]][Y[1]], OFFSETS[1]);
+		m_sponge[X[2]][Y[2]] = RotateLeft(m_sponge[X[2]][Y[2]], OFFSETS[2]);
+		m_sponge[X[3]][Y[3]] = RotateLeft(m_sponge[X[3]][Y[3]], OFFSETS[3]);
+		m_sponge[X[4]][Y[4]] = RotateLeft(m_sponge[X[4]][Y[4]], OFFSETS[4]);
+		m_sponge[X[5]][Y[5]] = RotateLeft(m_sponge[X[5]][Y[5]], OFFSETS[5]);
+		m_sponge[X[6]][Y[6]] = RotateLeft(m_sponge[X[6]][Y[6]], OFFSETS[6]);
+		m_sponge[X[7]][Y[7]] = RotateLeft(m_sponge[X[7]][Y[7]], OFFSETS[7]);
+		m_sponge[X[8]][Y[8]] = RotateLeft(m_sponge[X[8]][Y[8]], OFFSETS[8]);
+		m_sponge[X[9]][Y[9]] = RotateLeft(m_sponge[X[9]][Y[9]], OFFSETS[9]);
+		m_sponge[X[10]][Y[10]] = RotateLeft(m_sponge[X[10]][Y[10]], OFFSETS[10]);
+		m_sponge[X[11]][Y[11]] = RotateLeft(m_sponge[X[11]][Y[11]], OFFSETS[11]);
+		m_sponge[X[12]][Y[12]] = RotateLeft(m_sponge[X[12]][Y[12]], OFFSETS[12]);
+		m_sponge[X[13]][Y[13]] = RotateLeft(m_sponge[X[13]][Y[13]], OFFSETS[13]);
+		m_sponge[X[14]][Y[14]] = RotateLeft(m_sponge[X[14]][Y[14]], OFFSETS[14]);
+		m_sponge[X[15]][Y[15]] = RotateLeft(m_sponge[X[15]][Y[15]], OFFSETS[15]);
+		m_sponge[X[16]][Y[16]] = RotateLeft(m_sponge[X[16]][Y[16]], OFFSETS[16]);
+		m_sponge[X[17]][Y[17]] = RotateLeft(m_sponge[X[17]][Y[17]], OFFSETS[17]);
+		m_sponge[X[18]][Y[18]] = RotateLeft(m_sponge[X[18]][Y[18]], OFFSETS[18]);
+		m_sponge[X[19]][Y[19]] = RotateLeft(m_sponge[X[19]][Y[19]], OFFSETS[19]);
+		m_sponge[X[20]][Y[20]] = RotateLeft(m_sponge[X[20]][Y[20]], OFFSETS[20]);
+		m_sponge[X[21]][Y[21]] = RotateLeft(m_sponge[X[21]][Y[21]], OFFSETS[21]);
+		m_sponge[X[22]][Y[22]] = RotateLeft(m_sponge[X[22]][Y[22]], OFFSETS[22]);
+		m_sponge[X[23]][Y[23]] = RotateLeft(m_sponge[X[23]][Y[23]], OFFSETS[23]);
 	};
 
 	inline void Pi()
@@ -195,14 +250,45 @@ private:
 		};
 
 		const Matrix tmp = m_sponge;
-		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+
+		// Expand loop
+		/*for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
 		{
 			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
 			{
 				const uint8_t index = INDEX[x][y];
-				m_sponge[x][y] = tmp[index][x];
+				m_sponge[x][y] = tmp[INDEX[x][y]][x];
 			}
-		}
+		}*/
+		m_sponge[0][0] = tmp[INDEX[0][0]][0];
+		m_sponge[0][1] = tmp[INDEX[0][1]][0];
+		m_sponge[0][2] = tmp[INDEX[0][2]][0];
+		m_sponge[0][3] = tmp[INDEX[0][3]][0];
+		m_sponge[0][4] = tmp[INDEX[0][4]][0];
+
+		m_sponge[1][0] = tmp[INDEX[1][0]][1];
+		m_sponge[1][1] = tmp[INDEX[1][1]][1];
+		m_sponge[1][2] = tmp[INDEX[1][2]][1];
+		m_sponge[1][3] = tmp[INDEX[1][3]][1];
+		m_sponge[1][4] = tmp[INDEX[1][4]][1];
+
+		m_sponge[2][0] = tmp[INDEX[2][0]][2];
+		m_sponge[2][1] = tmp[INDEX[2][1]][2];
+		m_sponge[2][2] = tmp[INDEX[2][2]][2];
+		m_sponge[2][3] = tmp[INDEX[2][3]][2];
+		m_sponge[2][4] = tmp[INDEX[2][4]][2];
+
+		m_sponge[3][0] = tmp[INDEX[3][0]][3];
+		m_sponge[3][1] = tmp[INDEX[3][1]][3];
+		m_sponge[3][2] = tmp[INDEX[3][2]][3];
+		m_sponge[3][3] = tmp[INDEX[3][3]][3];
+		m_sponge[3][4] = tmp[INDEX[3][4]][3];
+
+		m_sponge[4][0] = tmp[INDEX[4][0]][4];
+		m_sponge[4][1] = tmp[INDEX[4][1]][4];
+		m_sponge[4][2] = tmp[INDEX[4][2]][4];
+		m_sponge[4][3] = tmp[INDEX[4][3]][4];
+		m_sponge[4][4] = tmp[INDEX[4][4]][4];
 	};
 
 	inline void Chi()
@@ -213,7 +299,7 @@ private:
 		const constexpr uint8_t IDX_2[MATRIX_SIZE]{ 2, 3, 4, 0, 1 };
 
 		const Matrix tmp = m_sponge;
-		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+		/*for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
 		{
 			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
 			{
@@ -221,7 +307,37 @@ private:
 				const uint8_t idx2 = IDX_2[x];
 				m_sponge[x][y] = tmp[x][y] ^ (~(tmp[idx1][y]) & tmp[idx2][y]);
 			}
-		}
+		}*/
+		/* Expand the loops */
+		m_sponge[0][0] = tmp[0][0] ^ (~(tmp[IDX_1[0]][0]) & tmp[IDX_2[0]][0]);
+		m_sponge[0][1] = tmp[0][1] ^ (~(tmp[IDX_1[0]][1]) & tmp[IDX_2[0]][1]);
+		m_sponge[0][2] = tmp[0][2] ^ (~(tmp[IDX_1[0]][2]) & tmp[IDX_2[0]][2]);
+		m_sponge[0][3] = tmp[0][3] ^ (~(tmp[IDX_1[0]][3]) & tmp[IDX_2[0]][3]);
+		m_sponge[0][4] = tmp[0][4] ^ (~(tmp[IDX_1[0]][4]) & tmp[IDX_2[0]][4]);
+
+		m_sponge[1][0] = tmp[1][0] ^ (~(tmp[IDX_1[1]][0]) & tmp[IDX_2[1]][0]);
+		m_sponge[1][1] = tmp[1][1] ^ (~(tmp[IDX_1[1]][1]) & tmp[IDX_2[1]][1]);
+		m_sponge[1][2] = tmp[1][2] ^ (~(tmp[IDX_1[1]][2]) & tmp[IDX_2[1]][2]);
+		m_sponge[1][3] = tmp[1][3] ^ (~(tmp[IDX_1[1]][3]) & tmp[IDX_2[1]][3]);
+		m_sponge[1][4] = tmp[1][4] ^ (~(tmp[IDX_1[1]][4]) & tmp[IDX_2[1]][4]);
+
+		m_sponge[2][0] = tmp[2][0] ^ (~(tmp[IDX_1[2]][0]) & tmp[IDX_2[2]][0]);
+		m_sponge[2][1] = tmp[2][1] ^ (~(tmp[IDX_1[2]][1]) & tmp[IDX_2[2]][1]);
+		m_sponge[2][2] = tmp[2][2] ^ (~(tmp[IDX_1[2]][2]) & tmp[IDX_2[2]][2]);
+		m_sponge[2][3] = tmp[2][3] ^ (~(tmp[IDX_1[2]][3]) & tmp[IDX_2[2]][3]);
+		m_sponge[2][4] = tmp[2][4] ^ (~(tmp[IDX_1[2]][4]) & tmp[IDX_2[2]][4]);
+
+		m_sponge[3][0] = tmp[3][0] ^ (~(tmp[IDX_1[3]][0]) & tmp[IDX_2[3]][0]);
+		m_sponge[3][1] = tmp[3][1] ^ (~(tmp[IDX_1[3]][1]) & tmp[IDX_2[3]][1]);
+		m_sponge[3][2] = tmp[3][2] ^ (~(tmp[IDX_1[3]][2]) & tmp[IDX_2[3]][2]);
+		m_sponge[3][3] = tmp[3][3] ^ (~(tmp[IDX_1[3]][3]) & tmp[IDX_2[3]][3]);
+		m_sponge[3][4] = tmp[3][4] ^ (~(tmp[IDX_1[3]][4]) & tmp[IDX_2[3]][4]);
+
+		m_sponge[4][0] = tmp[4][0] ^ (~(tmp[IDX_1[4]][0]) & tmp[IDX_2[4]][0]);
+		m_sponge[4][1] = tmp[4][1] ^ (~(tmp[IDX_1[4]][1]) & tmp[IDX_2[4]][1]);
+		m_sponge[4][2] = tmp[4][2] ^ (~(tmp[IDX_1[4]][2]) & tmp[IDX_2[4]][2]);
+		m_sponge[4][3] = tmp[4][3] ^ (~(tmp[IDX_1[4]][3]) & tmp[IDX_2[4]][3]);
+		m_sponge[4][4] = tmp[4][4] ^ (~(tmp[IDX_1[4]][4]) & tmp[IDX_2[4]][4]);
 	}
 
 	inline void Iota(const uint8_t round)
@@ -317,7 +433,6 @@ public:
 					AddPadding(chunkBegin + inputLen);
 					lastIteration = true;
 				}
-
 
 				inputLen -= SHA3_RATEBYES;
 				typename decltype(buffer)::const_iterator _cbegin = chunkBegin;
