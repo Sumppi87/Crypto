@@ -9,166 +9,42 @@
 #include <intrin.h>
 #include <emmintrin.h>
 
-namespace SHA3
-{
 namespace
 {
 constexpr const size_t ToBytes(const size_t bits) { return bits / 8ULL; };
 
 static constexpr const uint8_t MATRIX_SIZE = 5U;
 using Matrix = std::array<std::array<uint64_t, MATRIX_SIZE>, MATRIX_SIZE>;
-using byte_t = uint8_t;
 
 const constexpr uint8_t ITERATIONS = 24;
+
 static constexpr const size_t STATE_SIZE = 1600ULL;
-static constexpr const size_t STATE_SIZE_BYTES = ToBytes(STATE_SIZE);
+static constexpr const uint8_t STATE_SIZE_BYTES = ToBytes(STATE_SIZE);
 
-inline void Theta(Matrix& A)
+using byte_t = uint8_t;
+
+inline uint64_t RotateLeft(const uint64_t value, const uint8_t rotation)
 {
-	const uint64_t C[MATRIX_SIZE]
-	{
-		A[0][0] ^ A[0][1] ^ A[0][2] ^ A[0][3] ^ A[0][4],
-		A[1][0] ^ A[1][1] ^ A[1][2] ^ A[1][3] ^ A[1][4],
-		A[2][0] ^ A[2][1] ^ A[2][2] ^ A[2][3] ^ A[2][4],
-		A[3][0] ^ A[3][1] ^ A[3][2] ^ A[3][3] ^ A[3][4],
-		A[4][0] ^ A[4][1] ^ A[4][2] ^ A[4][3] ^ A[4][4]
-	};
+	return __shiftleft128(value, value, rotation);
+}
 
-	const uint64_t D[MATRIX_SIZE]
-	{
-		C[4] ^ __shiftleft128(C[1], C[1], 1),
-		C[0] ^ __shiftleft128(C[2], C[2], 1),
-		C[1] ^ __shiftleft128(C[3], C[3], 1),
-		C[2] ^ __shiftleft128(C[4], C[4], 1),
-		C[3] ^ __shiftleft128(C[0], C[0], 1)
-	};
-
-	for (size_t x = 0; x < MATRIX_SIZE; ++x)
-	{
-		for (size_t y = 0; y < MATRIX_SIZE; ++y)
-		{
-			A[x][y] ^= D[x];
-		}
-	}
-};
-
-inline void Rho(Matrix& A)
+inline void NextIndex(uint8_t& x, uint8_t& y, uint8_t& i)
 {
-	size_t x = 1;
-	size_t y = 0;
-	for (size_t t = 0; t < ITERATIONS; ++t)
-	{
-		const auto offset = uint8_t(((t + 1) * (t + 2) / 2) % 64);
-		A[x][y] = __shiftleft128(A[x][y], A[x][y], offset);
-
-		const size_t tmp = y;
-		y = (2 * x + 3 * y) % MATRIX_SIZE;
-		x = tmp;
-	};
-};
-
-inline void Pi(Matrix& A)
-{
-	const Matrix tmp = A;
-	for (size_t x = 0; x < MATRIX_SIZE; ++x)
-	{
-		for (size_t y = 0; y < MATRIX_SIZE; ++y)
-		{
-			A[x][y] = tmp[(x + 3 * y) % MATRIX_SIZE][x];
-		}
-	}
-};
-
-inline void Chi(Matrix& A)
-{
-	const Matrix tmp = A;
-	for (size_t x = 0; x < MATRIX_SIZE; ++x)
-	{
-		for (size_t y = 0; y < MATRIX_SIZE; ++y)
-		{
-			A[x][y] = tmp[x][y] ^ (~(tmp[(x + 1) % MATRIX_SIZE][y]) & tmp[(x + 2) % MATRIX_SIZE][y]);
-		}
-	}
-};
-
-inline void Iota(Matrix& A, const size_t round)
-{
-	constexpr const uint64_t RC[ITERATIONS]
-	{
-		0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL,
-		0x8000000080008000ULL, 0x000000000000808BULL, 0x0000000080000001ULL,
-		0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008AULL,
-		0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
-		0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL,
-		0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
-		0x000000000000800AULL, 0x800000008000000AULL, 0x8000000080008081ULL,
-		0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
-	};
-
-	A[0][0] ^= RC[round];
-};
-
-inline void KeccakP(Matrix& A)
-{
-	for (size_t round = 0; round < ITERATIONS; ++round)
-	{
-		Theta(A);
-		Rho(A);
-		Pi(A);
-		Chi(A);
-		Iota(A, round);
-	}
-};
-
-inline void NextIndex(size_t& x, size_t& y, size_t& i)
-{
-	if (++i != 8ULL)
+	if (++i != 8U)
 	{
 		return;
 	}
-	i = 0ULL;
+	i = 0U;
 	if (++x != MATRIX_SIZE)
 	{
 		return;
 	}
-	x = 0ULL;
+	x = 0U;
 	if (++y != MATRIX_SIZE)
 	{
 		return;
 	}
 }
-
-template <typename InIter>
-void Absorb(InIter first, InIter last, Matrix& A)
-{
-	size_t x = 0;
-	size_t y = 0;
-	size_t i = 0;
-	for (; first != last && y < MATRIX_SIZE; ++first)
-	{
-		auto tmp = static_cast<uint64_t>(*first);
-		A[x][y] ^= (tmp << (i * 8));
-		NextIndex(x, y, i);
-	};
-}
-
-template <typename OutIter>
-inline OutIter DoSqueeze(const Matrix& A, OutIter first, OutIter last, const size_t rateBytes)
-{
-	size_t x = 0;
-	size_t y = 0;
-	size_t i = 0;
-	for (size_t readBytes = 0;
-		first != last && y < MATRIX_SIZE && readBytes < rateBytes;
-		++readBytes, ++first)
-	{
-		auto tmp = static_cast<uint64_t>(A[x][y]);
-		auto p = reinterpret_cast<byte_t*>(&tmp);
-		*first = *(p + i);
-		NextIndex(x, y, i);
-	}
-	return first;
-};
 
 template <typename InIter>
 std::string BytesToHex(InIter begin, InIter end)
@@ -183,17 +59,202 @@ std::string BytesToHex(InIter begin, InIter end)
 	return ss.str();
 }
 
+template <uint8_t RATE_BYTES>
+class Sponge
+{
+public:
+	Sponge()
+		: m_sponge{} {}
+
+	template <typename InIter>
+	void Absorb(InIter first, InIter last)
+	{
+		uint8_t x = 0;
+		uint8_t y = 0;
+		uint8_t i = 0;
+		for (; first != last && y < MATRIX_SIZE; ++first)
+		{
+			auto tmp = static_cast<uint64_t>(*first);
+			m_sponge[x][y] ^= (tmp << (i * 8));
+			NextIndex(x, y, i);
+		}
+
+		KeccakP();
+	}
+
+	template <typename InIter>
+	inline void Squeeze(InIter first, InIter last)
+	{
+		first = DoSqueeze(first, last);
+		while (first != last)
+		{
+			KeccakP();
+			first = DoSqueeze(first, last);
+		}
+	}
+
+private:
+	inline void KeccakP()
+	{
+		for (uint8_t round = 0; round < ITERATIONS; ++round)
+		{
+			Theta();
+			Rho();
+			Pi();
+			Chi();
+			Iota(round);
+		}
+	}
+
+	template <typename OutIter>
+	inline OutIter DoSqueeze(OutIter first, OutIter last)
+	{
+		uint8_t x = 0;
+		uint8_t y = 0;
+		uint8_t i = 0;
+		for (uint8_t readBytes = 0;
+			first != last && y < MATRIX_SIZE && readBytes < RATE_BYTES;
+			++readBytes, ++first)
+		{
+			auto tmp = static_cast<uint64_t>(m_sponge[x][y]);
+			auto p = reinterpret_cast<byte_t*>(&tmp);
+			*first = *(p + i);
+			NextIndex(x, y, i);
+		}
+		return first;
+	}
+
+	inline void Theta()
+	{
+		const uint64_t C[MATRIX_SIZE]
+		{
+			m_sponge[0][0] ^ m_sponge[0][1] ^ m_sponge[0][2] ^ m_sponge[0][3] ^ m_sponge[0][4],
+			m_sponge[1][0] ^ m_sponge[1][1] ^ m_sponge[1][2] ^ m_sponge[1][3] ^ m_sponge[1][4],
+			m_sponge[2][0] ^ m_sponge[2][1] ^ m_sponge[2][2] ^ m_sponge[2][3] ^ m_sponge[2][4],
+			m_sponge[3][0] ^ m_sponge[3][1] ^ m_sponge[3][2] ^ m_sponge[3][3] ^ m_sponge[3][4],
+			m_sponge[4][0] ^ m_sponge[4][1] ^ m_sponge[4][2] ^ m_sponge[4][3] ^ m_sponge[4][4]
+		};
+
+		const uint64_t D[MATRIX_SIZE]
+		{
+			C[4] ^ RotateLeft(C[1], 1),
+			C[0] ^ RotateLeft(C[2], 1),
+			C[1] ^ RotateLeft(C[3], 1),
+			C[2] ^ RotateLeft(C[4], 1),
+			C[3] ^ RotateLeft(C[0], 1)
+		};
+
+		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+		{
+			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
+			{
+				m_sponge[x][y] ^= D[x];
+			}
+		}
+	};
+
+	inline void Rho()
+	{
+		// Precalculate values of 'x' and 'y', and 'offset' for each iteration
+		/*
+		for (uint8_t t = 0; t < ITERATIONS; ++t)
+		{
+			const auto offset = uint8_t(((t + 1) * (t + 2) / 2) % 64);
+
+			uint8_t x = 1;
+			uint8_t y = 0;
+			const uint8_t tmp = y;
+			y = (2U * x + 3U * y) % MATRIX_SIZE;
+			x = tmp;
+		}
+		*/
+
+		const constexpr uint8_t OFFSETS[ITERATIONS]{ 1, 3, 6, 10, 15, 21, 28, 36, 45, 55, 2, 14, 27, 41, 56, 8, 25, 43, 62, 18, 39, 61, 20, 44 };
+		const constexpr uint8_t X_INDEXES[ITERATIONS] { 1, 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1 };
+		const constexpr uint8_t Y_INDEXES[ITERATIONS] { 0, 2, 1, 2, 3, 3, 0, 1, 3, 1, 4, 4, 0, 3, 4, 3, 2, 2, 0, 4, 2, 4, 1, 1 };
+
+		for (uint8_t t = 0; t < ITERATIONS; ++t)
+		{
+			const uint8_t x = X_INDEXES[t];
+			const uint8_t y = Y_INDEXES[t];
+			m_sponge[x][y] = RotateLeft(m_sponge[x][y], OFFSETS[t]);
+		};
+	};
+
+	inline void Pi()
+	{
+		// Precalculated index
+		// using formula: (x + 3U * y) % MATRIX_SIZE
+		const constexpr uint8_t INDEX[MATRIX_SIZE][MATRIX_SIZE]
+		{
+			{ 0, 3, 1, 4, 2 },
+			{ 1, 4, 2, 0, 3 },
+			{ 2, 0, 3, 1, 4 },
+			{ 3, 1, 4, 2, 0 },
+			{ 4, 2, 0, 3, 1 }
+		};
+
+		const Matrix tmp = m_sponge;
+		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+		{
+			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
+			{
+				const uint8_t index = INDEX[x][y];
+				m_sponge[x][y] = tmp[index][x];
+			}
+		}
+	};
+
+	inline void Chi()
+	{
+		// Precalculated 1. index: (x + 1) % MATRIX_SIZE]
+		const constexpr uint8_t IDX_1[MATRIX_SIZE]{ 1, 2, 3, 4, 0 };
+		// Precalculated 2. index: (x + 2) % MATRIX_SIZE]
+		const constexpr uint8_t IDX_2[MATRIX_SIZE]{ 2, 3, 4, 0, 1 };
+
+		const Matrix tmp = m_sponge;
+		for (uint8_t x = 0; x < MATRIX_SIZE; ++x)
+		{
+			for (uint8_t y = 0; y < MATRIX_SIZE; ++y)
+			{
+				const uint8_t idx1 = IDX_1[x];
+				const uint8_t idx2 = IDX_2[x];
+				m_sponge[x][y] = tmp[x][y] ^ (~(tmp[idx1][y]) & tmp[idx2][y]);
+			}
+		}
+	}
+
+	inline void Iota(const uint8_t round)
+	{
+		constexpr const uint64_t RC[ITERATIONS]
+		{
+			0x0000000000000001ULL, 0x0000000000008082ULL, 0x800000000000808AULL,
+			0x8000000080008000ULL, 0x000000000000808BULL, 0x0000000080000001ULL,
+			0x8000000080008081ULL, 0x8000000000008009ULL, 0x000000000000008AULL,
+			0x0000000000000088ULL, 0x0000000080008009ULL, 0x000000008000000AULL,
+			0x000000008000808BULL, 0x800000000000008BULL, 0x8000000000008089ULL,
+			0x8000000000008003ULL, 0x8000000000008002ULL, 0x8000000000000080ULL,
+			0x000000000000800AULL, 0x800000008000000AULL, 0x8000000080008081ULL,
+			0x8000000000008080ULL, 0x0000000080000001ULL, 0x8000000080008008ULL
+		};
+
+		m_sponge[0][0] ^= RC[round];
+	}
+
+private:
+	Matrix m_sponge;
+};
+
 template<Crypto::SHA3_Length SHA3>
 class _SHA3Hasher
 {
 public:
-	static constexpr const size_t SHA3_BYTES = static_cast<uint16_t>(SHA3);
-	static constexpr const size_t SHA3_CAPACITY = SHA3_BYTES * 2U;
-	static constexpr const size_t SHA3_RATEBYES = STATE_SIZE_BYTES - SHA3_CAPACITY;
+	static constexpr const uint8_t SHA3_BYTES = static_cast<uint16_t>(SHA3);
+	static constexpr const uint8_t SHA3_CAPACITY = SHA3_BYTES * 2U;
+	static constexpr const uint8_t SHA3_RATEBYES = STATE_SIZE_BYTES - SHA3_CAPACITY;
 
 	_SHA3Hasher()
-		: m_hash {}
-		, m_A {}
+		: m_hash{}
 	{}
 
 	inline void Process(std::filebuf* pBuffer)
@@ -262,8 +323,7 @@ public:
 				typename decltype(buffer)::const_iterator _cbegin = chunkBegin;
 				typename decltype(buffer)::const_iterator _cend = chunkEnd;
 
-				Absorb(_cbegin, _cend, m_A);
-				KeccakP(m_A);
+				m_sponge.Absorb(_cbegin, _cend);
 			}
 
 			firstIteration = false;
@@ -291,20 +351,17 @@ private:
 	{
 		auto first = m_hash.begin();
 		const auto last = m_hash.end();
-		first = DoSqueeze(m_A, first, last, SHA3_RATEBYES);
-		while (first != last)
-		{
-			KeccakP(m_A);
-			first = DoSqueeze(m_A, first, last, SHA3_RATEBYES);
-		}
+		m_sponge.Squeeze(first, last);
 	}
 
 private:
 	std::array<byte_t, SHA3_BYTES> m_hash;
-	Matrix m_A;
+	Sponge<SHA3_RATEBYES> m_sponge;
 };
 }
 
+namespace SHA3
+{
 void SHA3Hasher::Process(const Crypto::SHA3_Length sha3, std::ifstream& ifs, char* hash)
 {
 	auto pBuffer = ifs.rdbuf();
