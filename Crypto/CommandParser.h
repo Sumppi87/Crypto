@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_set>
 #include <string>
+#include <any>
 
 enum class Command
 {
@@ -13,6 +14,8 @@ enum class Command
 	LOAD_PUBLIC_KEY,
 	ENCRYPT,
 	DECRYPT,
+	CREATE_SIGNATURE,
+	VALIDATE_SIGNATURE,
 	THREAD_COUNT,
 };
 
@@ -47,43 +50,62 @@ struct CommandData
 	{
 		Parameter()
 			: type(ParamType::INVALID)
-			, uValue(0)
-			, kValue(Crypto::KeySize::KS_64)
 		{
 		}
 
 		Parameter(uint64_t val)
 			: type(ParamType::THREAD_COUNT)
-			, uValue(val)
-			, kValue(Crypto::KeySize::KS_64)
+			, value(val)
 		{
 		}
 
 		Parameter(const Crypto::KeySize keySize)
 			: type(ParamType::KEYSIZE)
-			, uValue(0)
-			, kValue(keySize)
+			, value(keySize)
 		{
 		}
 
 		Parameter(const std::string& s)
 			: type(ParamType::STRING)
-			, uValue(0)
-			, kValue(Crypto::KeySize::KS_64)
-			, sValue(s)
+			, value(s)
 		{
 		}
 
-		ParamType type;
-		struct
+		template <typename T>
+		inline bool GetValue(T& v) const
 		{
-			//! \brief Numerical parameter, e.g. thread count
-			uint64_t uValue;
-			//! \brief Keysize
-			Crypto::KeySize kValue;
-			//! \brief string-value, e.g. filepath/name
-			std::string sValue;
-		};
+			bool ret = false;
+			if (value.type() != typeid(T))
+				return ret;
+
+			try
+			{
+				v = std::any_cast<T>(value);
+				ret = true;
+			}
+			catch (const std::bad_any_cast&)
+			{
+				// Invalid cast
+				std::cerr << "std::bad_any_cast while casting std::any to " << typeid(T).name() << std::endl;
+			}
+			catch (...)
+			{
+				std::cerr << "Unknown error while casting std::any to " << typeid(T).name() << std::endl;
+			}
+			return ret;
+		}
+
+		template <typename T>
+		inline T GetValue() const
+		{
+			T val;
+			if (GetValue(val))
+				return val;
+			return T();
+		}
+
+		ParamType type;
+		std::any value;
 	};
 
 	CmdInfo cmdInfo;

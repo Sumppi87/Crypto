@@ -2,6 +2,7 @@
 #include "BigInt.h"
 #include "CryptoUtils.h"
 #include "TaskManager.h"
+#include "SHA3.h"
 #include <iostream>
 #include <functional>
 
@@ -26,6 +27,28 @@ namespace
 			// Buffers are overlapping
 			return false;
 		return true;
+	}
+
+	inline Crypto::SHA3_Length GetHashLength(const Crypto::KeySize keysize)
+	{
+		Crypto::SHA3_Length ret = Crypto::SHA3_Length::SHA3_512;
+		switch (keysize)
+		{
+		case Crypto::KeySize::KS_256:
+			ret = Crypto::SHA3_Length::SHA3_224;
+			break;
+		case Crypto::KeySize::KS_512:
+			ret = Crypto::SHA3_Length::SHA3_384;
+			break;
+		case Crypto::KeySize::KS_1024:
+		case Crypto::KeySize::KS_2048:
+		case Crypto::KeySize::KS_3072:
+			ret = Crypto::SHA3_Length::SHA3_512;
+			break;
+		default:
+			break;
+		}
+		return ret;
 	}
 }
 
@@ -511,7 +534,7 @@ uint64_t Crypto::GetBlockCountEncryption(const KeySize keySize, const uint64_t d
 	if (blockSize == 0U)
 		return 0U;
 
-	return (dataSizePlain / blockSize) + (dataSizePlain / blockSize) > 0U ? 1U : 0U;
+	return (dataSizePlain / blockSize) + (dataSizePlain % blockSize) > 0U ? 1U : 0U;
 }
 
 uint64_t Crypto::GetBlockCountDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted)
@@ -533,4 +556,65 @@ uint64_t Crypto::GetBufferSizeEncryption(const KeySize keySize, const uint64_t d
 uint64_t Crypto::GetBufferSizeDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted)
 {
 	return GetBlockCountEncryption(keySize, dataSizeEncrypted) * GetBlockSizeEncrypted(keySize);
+}
+
+uint64_t Crypto::GetBufferSizeForSignature(const KeySize keySize)
+{
+	return GetBufferSizeEncryption(keySize, static_cast<uint8_t>(GetHashLength(keySize)));
+}
+
+Crypto::CryptoRet Crypto::CreateSignature(PrivateKey key,
+	std::ifstream& dataStream,
+	const DataOut signature)
+{
+	if (key == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (signature.pData == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	const SHA3_Length hashLength = GetHashLength(key->keySize);
+	const uint8_t hashBytes = static_cast<uint8_t>(hashLength);
+
+	uint16_t blockSize = 0U;
+	CryptoUtils::BlockSize(key->keySize, nullptr, &blockSize);
+
+	if (blockSize > signature.size)
+		return CryptoRet::INSUFFICIENT_BUFFER;
+
+	// Create a hash from the data
+	char hashBuffer[64] {}; // 64B is enough for all SHA3 lengths
+	SHA3::SHA3Hasher hasher;
+	hasher.Process(hashLength, dataStream, hashBuffer);
+
+	// Encrypt the data with private key
+	return CryptoUtils::CreateSignature(key, DataIn(hashBuffer, hashBytes), signature);
+}
+
+Crypto::CryptoRet Crypto::CheckSignature(PublicKey key,
+	std::ifstream& file,
+	const DataIn signature,
+	bool& validationResult)
+{
+	if (key == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (signature.pData == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+
+	const SHA3_Length hashLength = GetHashLength(key->keySize);
+	const uint8_t hashBytes = static_cast<uint8_t>(hashLength);
+
+	uint16_t blockSize = 0U;
+	CryptoUtils::BlockSize(key->keySize, nullptr, &blockSize);
+
+	if (blockSize > signature.size)
+		return CryptoRet::INSUFFICIENT_BUFFER;
+
+	// Create a hash from the data
+	char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
+	SHA3::SHA3Hasher hasher;
+	hasher.Process(hashLength, file, hashBuffer);
+
+	// Encrypt the data with private key
+	validationResult = CryptoUtils::CheckSignature(key, DataIn(hashBuffer, hashBytes), signature);
+	return CryptoRet::OK;
 }

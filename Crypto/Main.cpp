@@ -1,6 +1,6 @@
 // BigInteger.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
-
+#include "SHA3.h"
 #include "BigInt.h"
 #include "Crypto.h"
 #include "CryptoUtils.h"
@@ -331,8 +331,136 @@ bool EncryptData(const std::string& keyFile, const std::string& fileToEncrypt, c
 	return ret;
 }
 
+bool SignData(const std::string& keyFile, const std::string& fileToSign, const std::string& signatureFile)
+{
+	bool ret = false;
+	Crypto::AsymmetricKeys keys;
+	std::ifstream in;
+	std::ofstream out;
+
+	std::cout << "Importing asymmetric private key... ";
+	if (!ImportKey(&keys.privKey, keyFile))
+	{
+		std::cerr << "Error!" << std::endl;
+	}
+	else
+	{
+		std::cout << "Done" << std::endl;
+		std::cout << "Opening file to sign & signature file... ";
+		if (!OpenForRead(fileToSign, in))
+		{
+			std::cerr << "Error! Opening file '" << fileToSign << "' for signing failed!" << std::endl;
+		}
+		else if (!OpenForWrite(signatureFile, out))
+		{
+			std::cerr << "Error! Opening file '" << signatureFile << "' for storing the signature failed!" << std::endl;
+		}
+		else
+		{
+			std::cout << "Done" << std::endl;
+			std::cout << "Creating the signature... ";
+			const auto start = std::chrono::high_resolution_clock::now();
+			const auto bufferSize = Crypto::GetBufferSizeForSignature(keys.privKey->keySize);
+			char* buffer = new char[bufferSize] {};
+			ret = Crypto::CreateSignature(keys.privKey, in, Crypto::DataOut(buffer, bufferSize)) == Crypto::CryptoRet::OK;
+
+			const auto end = std::chrono::high_resolution_clock::now();
+			const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+			if (ret)
+			{
+				out.write(buffer, bufferSize);
+				std::cout << "Done (" << duration << "ms)" << std::endl;
+			}
+			else
+				std::cerr << "Error!" << std::endl;
+
+			delete[] buffer;
+		}
+	}
+
+	if (Crypto::DeleteKey(&keys.privKey) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Deleting Asymmetric private key failed!" << std::endl;
+		ret = false;
+	}
+
+	return ret;
+}
+
+bool ValidateSignature(const std::string& keyFile, const std::string& fileToCheck, const std::string& signatureFile)
+{
+	bool ret = false;
+	Crypto::AsymmetricKeys keys;
+	std::ifstream file;
+	std::ifstream signature;
+
+	std::cout << "Importing asymmetric public key... ";
+	if (!ImportKey(&keys.pubKey, keyFile))
+	{
+		std::cerr << "Error!" << std::endl;
+	}
+	else
+	{
+		std::cout << "Done" << std::endl;
+		std::cout << "Opening file to sign & signature file... ";
+		if (!OpenForRead(fileToCheck, file))
+		{
+			std::cerr << "Error! Opening file '" << fileToCheck << "' for signature checking failed!" << std::endl;
+		}
+		else if (!OpenForRead(signatureFile, signature))
+		{
+			std::cerr << "Error! Opening the signature file '" << signatureFile << "' failed!" << std::endl;
+		}
+		else
+		{
+			std::cout << "Done" << std::endl;
+			std::cout << "Checking the signature... ";
+			const auto start = std::chrono::high_resolution_clock::now();
+			const auto bufferSize = Crypto::GetBufferSizeForSignature(keys.pubKey->keySize);
+			char* buffer = new char[bufferSize] {};
+			signature.read(buffer, bufferSize);
+			bool match = false;
+			ret = Crypto::CheckSignature(keys.pubKey, file, Crypto::DataIn(buffer, bufferSize), match) == Crypto::CryptoRet::OK;
+
+			const auto end = std::chrono::high_resolution_clock::now();
+			const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+			if (ret && match)
+			{
+				std::cout << "Signature matches (" << duration << "ms)" << std::endl;
+			}
+			else
+				std::cerr << "Error!" << std::endl;
+
+			delete[] buffer;
+		}
+	}
+
+	if (Crypto::DeleteKey(&keys.privKey) != Crypto::CryptoRet::OK)
+	{
+		std::cerr << "Deleting Asymmetric private key failed!" << std::endl;
+		ret = false;
+	}
+
+	return ret;
+}
+
 int main(int argc, char** argv)
 {
+	if (argc == 3 && argv[1] == std::string("hash"))
+	{
+		std::ifstream stream;
+		if (OpenForRead(argv[2], stream))
+		{
+			SHA3::SHA3Hasher hasher;
+			char hash[64] {};
+			hasher.Process(Crypto::SHA3_Length::SHA3_512, stream, hash);
+			std::cout << BigInt::FromRawData(hash, 64).ToHex() << std::endl;
+			return 1;
+		}
+		return -1;
+	}
 	Commands commands;
 	if (!CommandParser(argc, argv).ReadCommands(commands))
 	{
@@ -345,7 +473,7 @@ int main(int argc, char** argv)
 	auto threadCountIter = commands.otherCmds.find(Command::THREAD_COUNT);
 	if (threadCountIter != commands.otherCmds.end())
 	{
-		const uint32_t threads = (*threadCountIter).second.cmdParams.at(0).uValue;
+		const uint32_t threads = (*threadCountIter).second.cmdParams.at(0).GetValue<uint64_t>();
 		Crypto::SetThreadCount(threads);
 	}
 
@@ -358,11 +486,12 @@ int main(int argc, char** argv)
 		}
 		else
 		{
-			CommandParser::PrintDetailedHelp(primaryParams.front().sValue);
+			CommandParser::PrintDetailedHelp(primaryParams.front().GetValue<std::string>());
 		}
 		break;
 	case Command::GENERATE_KEYS:
-		ret = GenerateKeys(primaryParams.at(0).kValue, primaryParams.at(1).sValue);
+		ret = GenerateKeys(primaryParams.at(0).GetValue<Crypto::KeySize>(),
+			primaryParams.at(1).GetValue<std::string>());
 		break;
 	case Command::ENCRYPT:
 	{
@@ -373,7 +502,9 @@ int main(int argc, char** argv)
 			break;
 		}
 		const CommandData data = (*subCmdIter).second;
-		ret = EncryptData(data.cmdParams.at(0).sValue, primaryParams.at(0).sValue, primaryParams.at(1).sValue);
+		ret = EncryptData(data.cmdParams.at(0).GetValue<std::string>(),
+			primaryParams.at(0).GetValue<std::string>(),
+			primaryParams.at(1).GetValue<std::string>());
 		break;
 	}
 	case Command::DECRYPT:
@@ -385,7 +516,37 @@ int main(int argc, char** argv)
 			break;
 		}
 		const CommandData data = (*subCmdIter).second;
-		ret = DecryptData(data.cmdParams.at(0).sValue, primaryParams.at(0).sValue, primaryParams.at(1).sValue);
+		ret = DecryptData(data.cmdParams.at(0).GetValue<std::string>(),
+			primaryParams.at(0).GetValue<std::string>(),
+			primaryParams.at(1).GetValue<std::string>());
+		break;
+	}
+	case Command::CREATE_SIGNATURE:
+	{
+		auto subCmdIter = commands.otherCmds.find(Command::LOAD_PRIVATE_KEY);
+		if (subCmdIter == commands.otherCmds.end())
+		{
+			std::cerr << "Invalid LOAD_PRIVATE_KEY command!";
+			break;
+		}
+		const CommandData data = (*subCmdIter).second;
+		ret = SignData(data.cmdParams.at(0).GetValue<std::string>(),
+			primaryParams.at(0).GetValue<std::string>(),
+			primaryParams.at(1).GetValue<std::string>());
+		break;
+	}
+	case Command::VALIDATE_SIGNATURE:
+	{
+		auto subCmdIter = commands.otherCmds.find(Command::LOAD_PUBLIC_KEY);
+		if (subCmdIter == commands.otherCmds.end())
+		{
+			std::cerr << "Invalid LOAD_PUBLIC_KEY command!";
+			break;
+		}
+		const CommandData data = (*subCmdIter).second;
+		ret = ValidateSignature(data.cmdParams.at(0).GetValue<std::string>(),
+			primaryParams.at(0).GetValue<std::string>(),
+			primaryParams.at(1).GetValue<std::string>());
 		break;
 	}
 	case Command::LOAD_PRIVATE_KEY:

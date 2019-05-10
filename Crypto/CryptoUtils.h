@@ -78,4 +78,12 @@ public:
 
 	static Crypto::CryptoRet ImportKey(Crypto::PrivateKey privKey, const Crypto::DataIn priv);
 	static Crypto::CryptoRet ImportKey(Crypto::PublicKey pubKey, const Crypto::DataIn pub);
+
+	static Crypto::CryptoRet CreateSignature(Crypto::PrivateKey privKey,
+		const Crypto::DataIn hashedData,
+		const Crypto::DataOut signature);
+
+	static bool CheckSignature(Crypto::PublicKey privKey,
+		const Crypto::DataIn hashedData,
+		const Crypto::DataIn signature);
 };

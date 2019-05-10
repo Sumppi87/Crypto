@@ -31,12 +31,6 @@ namespace
 		bool retVal = true;
 		switch (num)
 		{
-		case 64U:
-			keySize = Crypto::KeySize::KS_64;
-			break;
-		case 128U:
-			keySize = Crypto::KeySize::KS_128;
-			break;
 		case 256U:
 			keySize = Crypto::KeySize::KS_256;
 			break;
@@ -64,12 +58,6 @@ namespace
 		uint16_t block = 0U;
 		switch (keySize)
 		{
-		case Crypto::KeySize::KS_64:
-			block = 8U;
-			break;
-		case Crypto::KeySize::KS_128:
-			block = 16U;
-			break;
 		case Crypto::KeySize::KS_256:
 			block = 32U;
 			break;
@@ -325,26 +313,13 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize)
 	BigInt randPrime;
 	randPrime.Resize(blocks);
 
-	if (keySize == Crypto::KeySize::KS_64)
-	{
-		// Generate random data
-		RAND.RandomData((char*)randPrime.m_vals, keyBytes);
-		if (!randPrime.IsOdd())
-			randPrime = randPrime + 1U;
+	// Generate random data
+	RAND.RandomData((BigInt::Base*)randPrime.m_vals, randPrime.CurrentSize());
+	if (!randPrime.IsOdd())
+		randPrime = randPrime + 1U;
 
-		// Make sure the highest bit is set
-		randPrime.m_vals[0U] |= 1ULL << 31U;
-	}
-	else
-	{
-		// Generate random data
-		RAND.RandomData((BigInt::Base*)randPrime.m_vals, randPrime.CurrentSize());
-		if (!randPrime.IsOdd())
-			randPrime = randPrime + 1U;
-
-		// Make sure the highest bit is set
-		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << 63U;
-	}
+	// Make sure the highest bit is set
+	randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << 63U;
 
 	const BigInt two(2U);
 	while (!randPrime.IsPrimeNumber())
@@ -503,4 +478,40 @@ Crypto::CryptoRet CryptoUtils::ImportKey(Crypto::PublicKey pubKey, const Crypto:
 	}
 
 	return Crypto::CryptoRet::OK;
+}
+
+Crypto::CryptoRet CryptoUtils::CreateSignature(Crypto::PrivateKey key,
+	const Crypto::DataIn hashedData,
+	const Crypto::DataOut signature)
+{
+	BigInt data = BigInt::FromRawData(hashedData.pData, hashedData.size);
+	const auto blockSize = KeyBytes(key->keySize);
+
+	// Add some random data after the hash
+	if (hashedData.size < (blockSize - GUARD_BYTES))
+	{
+		data.Resize(blockSize / sizeof(BigInt::Base));
+		RAND.RandomData((char*)data.m_vals + hashedData.size, (blockSize - GUARD_BYTES) - hashedData.size);
+	}
+
+	BigInt encrypted = data.PowMod(key->d, key->n);
+	memcpy(signature.pData, encrypted.m_vals, blockSize);
+
+	return Crypto::CryptoRet::OK;
+}
+
+bool CryptoUtils::CheckSignature(Crypto::PublicKey key,
+	const Crypto::DataIn hashedData,
+	const Crypto::DataIn signature)
+{
+	const BigInt data = BigInt::FromRawData(signature.pData, signature.size);
+	const BigInt decryptedSignature = data.PowMod(key->e, key->n);
+
+	// decrypted signature contains some random data -> discard it
+	const BigInt expectedSignature = BigInt::FromRawData(decryptedSignature.m_vals, hashedData.size);
+
+	const BigInt actualSignature = BigInt::FromRawData(hashedData.pData, hashedData.size);
+
+	const bool signaturesMatch = (actualSignature == expectedSignature);
+	return signaturesMatch;
 }

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <iosfwd>
 
 #if not defined(_M_X64)
 #error("only 64bit is supported")
@@ -24,8 +25,6 @@ public:
 	//! \brief Supported key lengths
 	enum class KeySize : uint64_t
 	{
-		KS_64 = 64,
-		KS_128 = 128,
 		KS_256 = 256,
 		KS_512 = 512,
 		KS_1024 = 1024,
@@ -157,9 +156,9 @@ public:
 	// !\return CryptoRet::OK if the limit was set
 	static void SetThreadCount(const uint32_t maxThreads);
 
-//!
-//! Encryption/decryption related function
-//!
+	//!
+	//! Encryption/decryption related function
+	//!
 public:
 	// !\Brief Encrypts data with given public key
 	// !\param[in] key Encryption key
@@ -193,6 +192,34 @@ public:
 	//           NeededBufferSize : BlockCount * ((KeySize / 8) - 3)
 	static CryptoRet Decrypt(const PrivateKey key, const DataIn input, const DataOut output, uint64_t* pDecryptedBytes);
 
+	//!
+	//! Digital data signing related function
+	//!
+public:
+	// !\Brief Creates a digital signature from a file
+	// !\param[in] key Asymmetric private key, used the sign the data
+	// !\param[in] file File to sign
+	// !\param[in] signature Buffer to store signature
+	// !\return CryptoRet::OK if signature was succesfully created and stored
+	// !\details From the input file, the function creates a SHA-3 hash,
+	//           which is then encrypted with the private key.
+	static CryptoRet CreateSignature(PrivateKey key,
+		std::ifstream& file,
+		const DataOut signature);
+
+	// !\Brief Validates a file againts a digital signature
+	// !\param[in] key Asymmetric public key, used the validate the data
+	// !\param[in] file File to check
+	// !\param[in] signature Buffer containing the signature
+	// !\param[out] validationResult True if file matched the signature
+	// !\return CryptoRet::OK if signature was succesfully checked
+	// !\details From the input file, the function creates a SHA-3 hash,
+	//           which is then compared to the decrypted signature file.
+	static CryptoRet CheckSignature(PublicKey key,
+		std::ifstream& file,
+		const DataIn signature,
+		bool& validationResult);
+
 	// Utilities
 public:
 	// Macros for calculation needed buffer size for key export
@@ -207,6 +234,8 @@ public:
 
 	static uint64_t GetBufferSizeEncryption(const KeySize keySize, const uint64_t dataSizePlain);
 	static uint64_t GetBufferSizeDecryption(const KeySize keySize, const uint64_t dataSizeEncrypted);
+
+	static uint64_t GetBufferSizeForSignature(const KeySize keySize);
 
 	// !\brief Calculates the encrypted data block size
 	// !\param[in] k Used key length

@@ -19,10 +19,14 @@ namespace
 		Command::LOAD_PUBLIC_KEY,
 		Command::ENCRYPT,
 		Command::DECRYPT,
+		Command::CREATE_SIGNATURE,
+		Command::VALIDATE_SIGNATURE,
 #if defined(USE_THREADS)
 		Command::THREAD_COUNT,
 #endif
 	};
+
+	constexpr bool PRIMARY_CMD = true;
 
 	const std::map<Command, CmdInfo> CMD_INFO =
 	{
@@ -49,6 +53,15 @@ namespace
 	{Command::DECRYPT, {Command::DECRYPT, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PRIVATE_KEY, true}, {Command::THREAD_COUNT, false}},
 			"<file to decrypt> <decrypted file>",
 			"<file to decrypt, can be absolute or relative filepath> <decrypted file, can be absolute or relative filepath>"}},
+
+	{Command::CREATE_SIGNATURE, {Command::CREATE_SIGNATURE, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PRIVATE_KEY, true}},
+			"<file to sign> <created signature>",
+			"<file to sign, can be absolute or relative filepath> <created signature file, can be absolute or relative filepath>"}},
+
+	{Command::VALIDATE_SIGNATURE, {Command::VALIDATE_SIGNATURE, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PUBLIC_KEY, true}},
+			"<signature file> <file to validate>",
+			"<signature file, can be absolute or relative filepath> <file to be validated againts the signature, can be absolute or relative filepath>"}},
+
 #if defined(USE_THREADS)
 
 	{Command::THREAD_COUNT, {Command::THREAD_COUNT, false, { {1, {ParamType::THREAD_COUNT}} }, {}, []()
@@ -73,6 +86,8 @@ namespace
 		std::make_pair("load_public", Command::LOAD_PUBLIC_KEY),
 		std::make_pair("encrypt", Command::ENCRYPT),
 		std::make_pair("decrypt", Command::DECRYPT),
+		std::make_pair("sign_file", Command::CREATE_SIGNATURE),
+		std::make_pair("signature_check", Command::VALIDATE_SIGNATURE),
 #if defined(USE_THREADS)
 		std::make_pair("threads", Command::THREAD_COUNT)
 #endif
@@ -101,12 +116,6 @@ namespace
 		bool retVal = true;
 		switch (value)
 		{
-		case 64:
-			keySize = Crypto::KeySize::KS_64;
-			break;
-		case 128:
-			keySize = Crypto::KeySize::KS_128;
-			break;
 		case 256:
 			keySize = Crypto::KeySize::KS_256;
 			break;
