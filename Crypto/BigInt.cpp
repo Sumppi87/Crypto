@@ -228,6 +228,8 @@ BigInt BigInt::FromRawData(const char* data, const size_t length)
 	res.Resize((length / sizeof(Base)) + (length % sizeof(Base) > 0U ? 1U : 0U));
 	memcpy(&res.m_vals, data, length);
 
+	res.CleanPreceedingZeroes();
+
 	return res;
 }
 
@@ -574,10 +576,8 @@ BigInt BigInt::operator*(const BigInt& other) const
 		res.m_sign = IsPositive() == other.IsPositive() ? Sign::POS : Sign::NEG;
 		res.Resize(neededSize);
 
-		#pragma loop(no_vector)
 		for (size_t i = 0U; i < CurrentSize(); ++i)
 		{
-			#pragma loop(no_vector)
 			for (size_t ii = 0U; ii < other.CurrentSize(); ++ii)
 			{
 				Base carry = 0U;
@@ -616,10 +616,8 @@ BigInt BigInt::PowMod(const BigInt& exp, const BigInt& mod) const
 		multiplied.m_sign = multiplied.IsPositive() == multiplier.IsPositive() ? Sign::POS : Sign::NEG;
 		multiplied.Resize(neededSize);
 
-		#pragma loop(no_vector)
 		for (size_t i = 0U; i < multiplied.CurrentSize(); ++i)
 		{
-			#pragma loop(no_vector)
 			for (size_t ii = 0U; ii < multiplier.CurrentSize(); ++ii)
 			{
 				Base carry = 0U;
@@ -737,7 +735,6 @@ void BigInt::LeftShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res.m_vals[size_t(quot)] = __ll_lshift(target.m_vals[0U], rem);
 		res.m_vals[currSize + size_t(quot)] = __shiftleft128(target.m_vals[currSize - 1U], 0U, rem);
 
-		#pragma loop(no_vector)
 		for (size_t i = 1U; i < currSize; ++i)
 		{
 			res.m_vals[i + size_t(quot)] = __shiftleft128(target.m_vals[i - 1U], target.m_vals[i], rem);
@@ -812,7 +809,6 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 		res.Resize(target.CurrentSize() - quot);
 
 		const auto maxIndex = target.CurrentSize() - 1;
-		#pragma loop(no_vector)
 		for (size_t i = size_t(quot); i < maxIndex; ++i)
 		{
 			res.m_vals[i - size_t(quot)] = __shiftright128(target.m_vals[i], (i + 1U) < target.CurrentSize() ? target.m_vals[i + 1U] : 0U, rem);
@@ -874,11 +870,9 @@ std::string BigInt::ToHex() const
 
 	ret.append("0x");
 	bool nonZeroAdded = false;
-	#pragma loop(no_vector)
 	for (size_t i = CurrentSize() - 1U;; --i)
 	{
-		#pragma loop(no_vector)
-		for (auto nibbleNro = (sizeof(Base) * 2U) - 1U;; --nibbleNro)
+		for (int nibbleNro = (sizeof(Base) * 2U) - 1U; nibbleNro >= 0; --nibbleNro)
 		{
 			const auto mask = (Base(0xF) << (nibbleNro * 4));
 			const auto nibble = Base(m_vals[i] & mask) >> (nibbleNro * 4U);
@@ -888,9 +882,6 @@ std::string BigInt::ToHex() const
 			}
 			nonZeroAdded = true;
 			ret += NumToChar(nibble > UINT8_MAX ? UINT8_MAX : uint8_t(nibble), true);
-
-			if (nibbleNro == 0U)
-				break;
 		}
 		if (i == 0U)
 			break;
@@ -1327,7 +1318,6 @@ BigInt BigInt::SumWithoutSign(const BigInt& other) const
 	const size_t size = CurrentSize();
 	const size_t size2 = other.CurrentSize();
 
-	#pragma loop(no_vector)
 	for (size_t i = 0U; i < s; ++i)
 	{
 		const Base val1 = i < size ? m_vals[i] : 0U;
@@ -1347,7 +1337,6 @@ BigInt BigInt::SubstractWithoutSign(const BigInt& other) const
 {
 	BigInt copy(*this);
 	const size_t size = std::min(CurrentSize(), other.CurrentSize());
-	#pragma loop(no_vector)
 	for (size_t i = 0U; i < size; ++i)
 	{
 		const Base val = other.m_vals[i];
@@ -1399,12 +1388,10 @@ void BigInt::Mod(BigInt& rem, const BigInt& div)
 void BigInt::SubstractWithoutSign(BigInt& minuendRes, const BigInt& subtrahend)
 {
 	const size_t size = std::min(minuendRes.CurrentSize(), subtrahend.CurrentSize());
-	#pragma loop(no_vector)
 	for (size_t i = size - 1U;;)
 	{
 		if (_subborrow_u64(0U, minuendRes.m_vals[i], subtrahend.m_vals[i], &minuendRes.m_vals[i]))
 		{
-			#pragma loop(no_vector)
 			for (auto ii = i + 1U; _subborrow_u64(1, minuendRes.m_vals[ii], 0U, &minuendRes.m_vals[ii]); ++ii) {}
 		}
 		if (i != 0U)
