@@ -1,0 +1,9 @@
+Crypto.exe --load_private key_1.ppk --sign_file test.pdf test.pdf.sgn
+
+Crypto.exe --signature_check test.pdf test.pdf.sgn --load_public key_1.pub
+
+// V‰‰r‰ avain
+Crypto.exe --load_pub key_2.pub --signature_check test.pdf test.pdf.sgn
+
+// Muokattu tiedosto
+Crypto.exe --signature_check test_mod.pdf test.pdf.sgn --load_public key_1.pub

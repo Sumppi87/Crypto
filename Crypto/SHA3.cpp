@@ -5,9 +5,11 @@
 #include <iomanip>
 #include <sstream>
 #include <iostream>
-#include <chrono>
 #include <intrin.h>
 #include <emmintrin.h>
+#ifdef _DEBUG
+#include <chrono>
+#endif
 
 namespace
 {
@@ -375,7 +377,9 @@ public:
 
 	inline void Process(std::filebuf* pBuffer)
 	{
+#ifdef _DEBUG
 		const auto start = std::chrono::high_resolution_clock::now();
+#endif
 		constexpr int64_t bufferSize = SHA3_RATEBYES * 113; // Around 8kB
 		std::array<byte_t, bufferSize> buffer{};
 		auto bufferIterator = buffer.begin();
@@ -446,14 +450,14 @@ public:
 
 		Squeeze();
 
+#ifdef _DEBUG
 		const auto end = std::chrono::high_resolution_clock::now();
 		const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
 		std::cout << "Hashing " << (bytesRead / 1024ULL) << "kB took: " << duration << "us" << std::endl;
-
 		std::cout << "Hash: " << BytesToHex(m_hash.cbegin(), m_hash.cend()) << std::endl;
-
 		std::cout << "Hash: " << BytesToHex(m_hash.crbegin(), m_hash.crend()) << std::endl;
+#endif
 	}
 
 	inline void CopyToBuffer(char* pBuffer)
