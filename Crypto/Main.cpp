@@ -1,9 +1,9 @@
 // BigInteger.cpp : This file contains the 'main' function. Program execution begins and ends there.
 //
-#include "SHA3.h"
-#include "BigInt.h"
-#include "Crypto.h"
-#include "CryptoUtils.h"
+#include "../CryptoAPI/SHA3.h"
+#include "../CryptoAPI/BigInt.h"
+#include "../CryptoAPI/Crypto.h"
+#include "../CryptoAPI/CryptoUtils.h"
 #include "FileAccess.h"
 #include "CommandParser.h"
 #include <iostream>
