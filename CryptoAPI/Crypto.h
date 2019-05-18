@@ -269,7 +269,7 @@ public:
 	template<KeySize k, uint64_t size>
 	struct BlockCountDecryption
 	{
-		static_assert((size % BlockSizeEncrypted<k>::SIZE) == 0);
+		static_assert((size % BlockSizeEncrypted<k>::SIZE) == 0, "");
 
 		static const uint64_t SIZE = (size / BlockSizeEncrypted<k>::SIZE);
 	};
