@@ -16,11 +16,8 @@ TEST(LeftShift, LargeShift)
 	}
 }
 
-TEST(LeftShift, WalkLeft)
+TEST(LeftShift, WalkOneLeft)
 {
-	EXPECT_EQ(1, 1);
-	EXPECT_TRUE(true);
-
 	BigInt num(1);
 	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 1));
 	for (uint16_t shift = 1; shift < maxShift; ++shift)
@@ -30,5 +27,57 @@ TEST(LeftShift, WalkLeft)
 		const uint8_t hexNum = std::pow(2, shift % 4);
 		std::string expected = std::string("0x") + std::to_string(hexNum) + std::string(zeroes, '0');
 		ASSERT_EQ(expected, num.ToHex());
+	}
+}
+
+TEST(RightShift, LargeShift)
+{
+	constexpr auto zeroes = ((sizeof(BigInt::Base) * 2) * MAX_SIZE) - 1;
+	const std::string hexValue = std::string("0x") + std::to_string(8U) + std::string(zeroes, '0');
+	const BigInt value = BigInt::FromString(hexValue.c_str());
+
+	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE)) - 1;
+	const BigInt zero = value >> (maxShift + 1);
+	ASSERT_EQ(std::string("0x0"), zero.ToHex());
+
+	for (uint16_t shift = maxShift;;)
+	{
+		const BigInt num = value >> shift;
+		const uint16_t diff = (maxShift - shift);
+		const uint16_t zeroes = diff / 4;
+		const uint8_t hexNum = std::pow(2, (maxShift - shift) % 4);
+		std::string expected = std::string("0x") + std::to_string(hexNum) + std::string(zeroes, '0');
+		ASSERT_EQ(expected, num.ToHex());
+
+		if (shift > 0)
+			--shift;
+		else
+			break;
+	}
+}
+
+TEST(RightShift, WalkOneRight)
+{
+	constexpr auto zeroes = ((sizeof(BigInt::Base) * 2) * MAX_SIZE) - 1;
+	const std::string hexValue = std::string("0x") + std::to_string(8U) + std::string(zeroes, '0');
+	BigInt num = BigInt::FromString(hexValue.c_str());
+
+	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE)) - 1;
+	const BigInt zero = num >> (maxShift + 1);
+	ASSERT_EQ(std::string("0x0"), zero.ToHex());
+
+	for (uint16_t shift = maxShift - 1;;)
+	{
+		num = num >> 1;
+		const uint16_t zeroes = shift / 4;
+		const uint8_t hexNum = std::pow(2, shift % 4);
+		std::string expected = std::string("0x") + std::to_string(hexNum) + std::string(zeroes, '0');
+		std::string actual = num.ToHex();
+		ASSERT_EQ(expected, actual);
+
+		if (shift > 0)
+			--shift;
+		else
+			break;
 	}
 }

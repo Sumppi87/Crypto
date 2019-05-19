@@ -203,6 +203,12 @@ Crypto::CryptoRet Crypto::ImportAsymmetricKeys(AsymmetricKeys* pKeys, const Data
 	if (ret == CryptoRet::OK)
 		ret = ImportKey(&pKeys->pubKey, pub);
 
+	if (ret == CryptoRet::OK)
+	{
+		pKeys->keySize = pKeys->privKey->keySize;
+		ret = CryptoUtils::ValidateKeys(pKeys);
+	}
+
 	if (ret != CryptoRet::OK)
 	{
 		DeleteKey(&pKeys->privKey);

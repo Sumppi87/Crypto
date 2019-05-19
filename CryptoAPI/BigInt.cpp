@@ -800,7 +800,7 @@ void BigInt::RightShift(BigInt& res, const BigInt& target, const uint64_t shift)
 
 		const void* src = GetShiftedPtr(&target.m_vals[quot], bytesToShift);
 		void* dst = &res.m_vals[0U];
-		auto count = (currSize * sizeof(Base)) - bytesToShift;
+		const auto count = (currSize * sizeof(Base)) - ((quot * sizeof(Base)) + (rem / 8U));
 		memcpy(dst, src, count);
 		res.CleanPreceedingZeroes();
 	}
