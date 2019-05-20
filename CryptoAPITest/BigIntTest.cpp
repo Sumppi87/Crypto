@@ -2,7 +2,7 @@
 #include "../CryptoAPI/BigInt.h"
 #include <string>
 
-TEST(LeftShift, LargeShift)
+TEST(LeftShift, LargeShiftOne)
 {
 	const BigInt one(1);
 	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 1));
@@ -27,6 +27,58 @@ TEST(LeftShift, WalkOneLeft)
 		const uint8_t hexNum = std::pow(2, shift % 4);
 		std::string expected = std::string("0x") + std::to_string(hexNum) + std::string(zeroes, '0');
 		ASSERT_EQ(expected, num.ToHex());
+	}
+}
+
+TEST(LeftShift, WalkLeft)
+{
+	const uint64_t max = ~0ULL;
+	BigInt num(max);
+
+	// TODO: Fix a bug in left shift validation (over-index prevention is too strict in BigInt::LeftShift)
+	//constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 1));
+	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 2));
+
+	for (uint16_t shift = 1; shift < maxShift; ++shift)
+	{
+		num = num << 1;
+		const uint16_t zeroes = shift / 4;
+		const uint16_t rem = shift % 4;
+		const uint64_t hexValLS = uint64_t(max << rem);
+		const uint16_t hexValMS = (uint8_t(max) >> (4 - rem)) >> 4;
+		const std::string hex = hexValMS > 0
+			? ((std::stringstream() << std::hex << std::uppercase << hexValMS << hexValLS).str())
+			: ((std::stringstream() << std::hex << std::uppercase << hexValLS).str());
+
+		const std::string expected = std::string("0x") + hex + std::string(zeroes, '0');
+		const std::string actual = num.ToHex();
+		ASSERT_EQ(expected, actual);
+	}
+}
+
+TEST(LeftShift, LargeShift)
+{
+	const uint64_t max = ~0ULL;
+	const BigInt value(max);
+
+	// TODO: Fix a bug in left shift validation (over-index prevention is too strict in BigInt::LeftShift)
+	//constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 1));
+	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE - 2));
+
+	for (uint16_t shift = 1; shift < maxShift; ++shift)
+	{
+		const BigInt num = value << shift;
+		const uint16_t zeroes = shift / 4;
+		const uint16_t rem = shift % 4;
+		const uint64_t hexValLS = uint64_t(max << rem);
+		const uint16_t hexValMS = (uint8_t(max) >> (4 - rem)) >> 4;
+		const std::string hex = hexValMS > 0
+			? ((std::stringstream() << std::hex << std::uppercase << hexValMS << hexValLS).str())
+			: ((std::stringstream() << std::hex << std::uppercase << hexValLS).str());
+
+		const std::string expected = std::string("0x") + hex + std::string(zeroes, '0');
+		const std::string actual = num.ToHex();
+		ASSERT_EQ(expected, actual);
 	}
 }
 
