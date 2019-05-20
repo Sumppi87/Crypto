@@ -2,6 +2,8 @@
 #include "gtest/gtest.h"
 #include "../CryptoAPI/Crypto.h"
 #include "../CryptoAPI/CryptoUtils.h"
+#include <cstdio>
+#include <fstream>
 
 namespace
 {
@@ -86,10 +88,36 @@ template <Crypto::KeySize k,
 }
 
 template <Crypto::KeySize k>
+void TestDataSigning(Crypto::AsymmetricKeys* keys)
+{
+	FILE* tmpFile = std::tmpfile();
+	ASSERT_NE(tmpFile, nullptr);
+	{
+		std::ofstream file(tmpFile);
+		char randomData[8192]{};
+		CryptoUtils::RandomGenerator gen;
+		gen.RandomData(randomData, 8192);
+		file.write(randomData, 8192);
+	}
+
+	std::ifstream file(tmpFile);
+	constexpr auto bufSize = static_cast<uint16_t>(k) / 8;
+	char buffer[bufSize]{};
+	ASSERT_EQ(Crypto::CreateSignature(keys->privKey, file, Crypto::DataOut(buffer, bufSize)),
+		Crypto::CryptoRet::OK);
+
+	bool result = false;
+	ASSERT_EQ(Crypto::CheckSignature(keys->pubKey, file, Crypto::DataIn(buffer, bufSize), result),
+		Crypto::CryptoRet::OK);
+
+	EXPECT_TRUE(result);
+}
+
+template <Crypto::KeySize k>
 void TestCrypto(bool& ret)
 {
 	Crypto::AsymmetricKeys keys;
-	ASSERT_EQ(Crypto::CreateAsymmetricKeys(k, &keys), Crypto::CryptoRet::OK);
+	ASSERT_EQ(Crypto::CreateAsymmetricKeys(k, &keys), Crypto::CryptoRet::OK) << "Creating asymmetric keys failed";
 
 	TestKeyImportExport<k>(&keys);
 
@@ -98,11 +126,13 @@ void TestCrypto(bool& ret)
 	CryptoUtils::RandomGenerator gen;
 	gen.RandomData(data, dataLen);
 
-	TestThreadedEncryptDecrypt<k, 1024>(ret, &keys, Crypto::DataIn(data, dataLen));
+	TestThreadedEncryptDecrypt<k, dataLen>(ret, &keys, Crypto::DataIn(data, dataLen));
 	if (ret)
-		TestInplaceEncryptDecrypt<k, 1024>(ret, &keys, Crypto::DataIn(data, dataLen));
+		TestInplaceEncryptDecrypt<k, dataLen>(ret, &keys, Crypto::DataIn(data, dataLen));
 
-	ASSERT_EQ(Crypto::DeleteAsymmetricKeys(&keys), Crypto::CryptoRet::OK);
+	TestDataSigning<k>(&keys);
+
+	ASSERT_EQ(Crypto::DeleteAsymmetricKeys(&keys), Crypto::CryptoRet::OK) << "Deleting asymmetric keys failed";
 
 	ret = true;
 }
@@ -120,22 +150,28 @@ bool TestCrypto(const uint8_t iter, const uint8_t maxIters)
 }
 }
 
-TEST(CryptoAPITest, CryptoAPITests_Quick)
+template <typename T>
+class CryptoAPITest : public ::testing::Test {};
+
+template<Crypto::KeySize k, uint8_t iters>
+struct TestRun
 {
-	TestCrypto<Crypto::KeySize::KS_256>(0, 1);
-#ifndef _DEBUG
-	TestCrypto<Crypto::KeySize::KS_512>(0, 1);
-	TestCrypto<Crypto::KeySize::KS_1024>(0, 1);
-	TestCrypto<Crypto::KeySize::KS_2048>(0, 1);
-#endif
-}
+	static constexpr Crypto::KeySize keySize = k;
+	static constexpr uint8_t iterations = iters;
+};
 
 #ifndef _DEBUG
-TEST(CryptoAPITest, CryptoAPITests_Extended)
-{
-	for (auto i = 0; i < 25 && TestCrypto<Crypto::KeySize::KS_256>(i, 25); ++i) {}
-	for (auto i = 0; i < 15 && TestCrypto<Crypto::KeySize::KS_512>(i, 15); ++i) {}
-	for (auto i = 0; i < 5 && TestCrypto<Crypto::KeySize::KS_1024>(i, 5); ++i) {}
-	for (auto i = 0; i < 3 && TestCrypto<Crypto::KeySize::KS_2048>(i, 3); ++i) {}
-}
+using TestRuns = ::testing::Types<TestRun<Crypto::KeySize::KS_256, 25>,
+	TestRun<Crypto::KeySize::KS_512, 15>,
+	TestRun<Crypto::KeySize::KS_1024, 5>,
+	TestRun<Crypto::KeySize::KS_2048, 3>>;
+#else
+using TestRuns = ::testing::Types<TestRun<Crypto::KeySize::KS_256, 1>>;
 #endif
+TYPED_TEST_CASE(CryptoAPITest, TestRuns);
+
+TYPED_TEST(CryptoAPITest, CryptoAPITests)
+{
+	gtest_TypeParam_ param;
+	for (auto i = 0; i < param.iterations && TestCrypto<param.keySize>(i, param.iterations); ++i) {}
+}
