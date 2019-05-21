@@ -82,7 +82,7 @@ TEST(LeftShift, LargeShift)
 	}
 }
 
-TEST(RightShift, LargeShift)
+TEST(RightShift, LargeShiftOne)
 {
 	constexpr auto zeroes = ((sizeof(BigInt::Base) * 2) * MAX_SIZE) - 1;
 	const std::string hexValue = std::string("0x") + std::to_string(8U) + std::string(zeroes, '0');
@@ -131,5 +131,35 @@ TEST(RightShift, WalkOneRight)
 			--shift;
 		else
 			break;
+	}
+}
+
+TEST(RightShift, WalkRight)
+{
+	const uint64_t max = ~0ULL;
+
+	constexpr auto zeroes = ((sizeof(BigInt::Base) * 2) * (MAX_SIZE - 1));
+	const std::string hexValue = std::string("0xFFFFFFFFFFFFFFFF") + std::string(zeroes, '0');
+	BigInt num = BigInt::FromString(hexValue.c_str());
+
+	constexpr auto maxShift = ((sizeof(BigInt::Base) * 8) * (MAX_SIZE));
+	const BigInt zero = num >> (maxShift + 1);
+	ASSERT_EQ(std::string("0x0"), zero.ToHex());
+
+	for (uint16_t iter = 1; iter < maxShift; ++iter)
+	{
+		num = num >> 1;
+		const int temp = (maxShift - iter) / 4;
+		const int zeroes = temp - int(sizeof(BigInt::Base) * 2);
+		const uint16_t rem = iter % 4;
+		const uint64_t hexValMS = zeroes >= 0 ? uint64_t(max >> rem) : max >> (iter % (sizeof(BigInt::Base) * 8));
+		const uint16_t hexValLS = uint8_t(max << (4 - rem)) & 0x0F;
+		const std::string hex = (hexValLS > 0) && (zeroes >= 0)
+			? ((std::stringstream() << std::hex << std::uppercase << hexValMS << hexValLS).str())
+			: ((std::stringstream() << std::hex << std::uppercase << hexValMS).str());
+
+		const std::string expected = std::string("0x") + ((zeroes > 0) ? hex + std::string(zeroes, '0') : hex);
+		const std::string actual = num.ToHex();
+		ASSERT_EQ(expected, actual);
 	}
 }
