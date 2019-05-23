@@ -13,136 +13,136 @@
 
 namespace
 {
-	// How many iterations to perform when testing whether a value is a prime or not
-	// With 60, a chance for a false positive is 1 / (2^128)
-	const uint8_t PRIME_TEST_ITERATIONS = 60U;
+// How many iterations to perform when testing whether a value is a prime or not
+// With 60, a chance for a false positive is 1 / (2^128)
+const uint8_t PRIME_TEST_ITERATIONS = 60U;
 
-	const unsigned char BASE_BITS = sizeof(BigInt::Base) * 8U;
+const unsigned char BASE_BITS = sizeof(BigInt::Base) * 8U;
 
-	char NumToChar(const uint8_t num, const bool isHex)
+char NumToChar(const uint8_t num, const bool isHex)
+{
+	switch (num)
 	{
+	case 0U:
+		return '0';
+	case 1U:
+		return '1';
+	case 2U:
+		return '2';
+	case 3U:
+		return '3';
+	case 4U:
+		return '4';
+	case 5U:
+		return '5';
+	case 6U:
+		return '6';
+	case 7U:
+		return '7';
+	case 8U:
+		return '8';
+	case 9U:
+		return '9';
+	default:
+		if (!isHex)
+			throw std::invalid_argument("Not a valid decimal number");
 		switch (num)
 		{
-		case 0U:
-			return '0';
-		case 1U:
-			return '1';
-		case 2U:
-			return '2';
-		case 3U:
-			return '3';
-		case 4U:
-			return '4';
-		case 5U:
-			return '5';
-		case 6U:
-			return '6';
-		case 7U:
-			return '7';
-		case 8U:
-			return '8';
-		case 9U:
-			return '9';
+		case 10U:
+			return 'A';
+		case 11U:
+			return 'B';
+		case 12U:
+			return 'C';
+		case 13U:
+			return 'D';
+		case 14U:
+			return 'E';
+		case 15U:
+			return 'F';
 		default:
-			if (!isHex)
-				throw std::invalid_argument("Not a valid decimal number");
-			switch (num)
-			{
-			case 10U:
-				return 'A';
-			case 11U:
-				return 'B';
-			case 12U:
-				return 'C';
-			case 13U:
-				return 'D';
-			case 14U:
-				return 'E';
-			case 15U:
-				return 'F';
-			default:
-				throw std::invalid_argument("Not a valid hexadecimal");
-			}
+			throw std::invalid_argument("Not a valid hexadecimal");
 		}
 	}
+}
 
-	uint8_t CharToNum(const char c, const bool isHex)
+uint8_t CharToNum(const char c, const bool isHex)
+{
+	switch (c)
 	{
+	case '0':
+		return 0U;
+	case '1':
+		return 1U;
+	case '2':
+		return 2U;
+	case '3':
+		return 3U;
+	case '4':
+		return 4U;
+	case '5':
+		return 5U;
+	case '6':
+		return 6U;
+	case '7':
+		return 7U;
+	case '8':
+		return 8U;
+	case '9':
+		return 9U;
+	default:
+		if (!isHex)
+			throw std::invalid_argument("Not a valid decimal number");
 		switch (c)
 		{
-		case '0':
-			return 0U;
-		case '1':
-			return 1U;
-		case '2':
-			return 2U;
-		case '3':
-			return 3U;
-		case '4':
-			return 4U;
-		case '5':
-			return 5U;
-		case '6':
-			return 6U;
-		case '7':
-			return 7U;
-		case '8':
-			return 8U;
-		case '9':
-			return 9U;
+		case 'A':
+			return 10U;
+		case 'B':
+			return 11U;
+		case 'C':
+			return 12U;
+		case 'D':
+			return 13U;
+		case 'E':
+			return 14U;
+		case 'F':
+			return 15U;
 		default:
-			if (!isHex)
-				throw std::invalid_argument("Not a valid decimal number");
-			switch (c)
-			{
-			case 'A':
-				return 10U;
-			case 'B':
-				return 11U;
-			case 'C':
-				return 12U;
-			case 'D':
-				return 13U;
-			case 'E':
-				return 14U;
-			case 'F':
-				return 15U;
-			default:
-				throw std::invalid_argument("Not a valid hexadecimal");
-				break;
-			}
+			throw std::invalid_argument("Not a valid hexadecimal");
+			break;
 		}
 	}
+}
 
-	inline void AddResult(uint64_t* src, const uint64_t val)
+inline void AddResult(uint64_t* src, const uint64_t val)
+{
+	if (_addcarry_u64(0U, val, *src, src))
 	{
-		if (_addcarry_u64(0U, val, *src, src))
-		{
-			AddResult(src + 1U, 1U);
-		}
-	};
-
-	inline void SubResult(uint64_t* src, const uint64_t val, const unsigned char carry)
-	{
-		if (_subborrow_u64(carry, *src, val, src))
-		{
-			SubResult(src + 1U, 0U, 1U);
-		}
-	};
-
-	inline void* GetShiftedPtr(uint64_t* basePtr, const unsigned char shift)
-	{
-		char* p = reinterpret_cast<char*>(basePtr);
-		p += shift;
-		return p;
+		AddResult(src + 1U, 1U);
 	}
+};
 
-	inline const void* GetShiftedPtr(const uint64_t* basePtr, const unsigned char shift)
+inline void SubResult(uint64_t* src, const uint64_t val, const unsigned char carry)
+{
+	if (_subborrow_u64(carry, *src, val, src))
 	{
-		const char* p = reinterpret_cast<const char*>(basePtr);
-		p += shift;
-		return p;
+		SubResult(src + 1U, 0U, 1U);
 	}
+};
+
+inline void* GetShiftedPtr(uint64_t* basePtr, const unsigned char shift)
+{
+	char* p = reinterpret_cast<char*>(basePtr);
+	p += shift;
+	return p;
+}
+
+inline const void* GetShiftedPtr(const uint64_t* basePtr, const unsigned char shift)
+{
+	const char* p = reinterpret_cast<const char*>(basePtr);
+	p += shift;
+	return p;
+}
 }
 
 BigInt::ValueContainer::ValueContainer()

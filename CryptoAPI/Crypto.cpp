@@ -8,48 +8,48 @@
 
 namespace
 {
-	//! \brief Defines a default public exponent (e in public key)
-	const BigInt DEFAULT_E(65537);
+//! \brief Defines a default public exponent (e in public key)
+const BigInt DEFAULT_E(65537);
 
-	template <typename Buffer1, typename Buffer2>
-	bool ValidateBuffers(const Buffer1 input, const Buffer2 output)
-	{
-		if (input.pData == nullptr || input.size == 0U)
-			return false;
-		else if (output.pData == nullptr || output.size == 0U)
-			return false;
-		else if ((input.pData > output.pData)
-			&& ((output.pData + output.size) >= input.pData))
-			// Buffers are overlapping
-			return false;
-		else if ((output.pData > input.pData)
-			&& ((input.pData + input.size) >= output.pData))
-			// Buffers are overlapping
-			return false;
-		return true;
-	}
+template <typename Buffer1, typename Buffer2>
+bool ValidateBuffers(const Buffer1 input, const Buffer2 output)
+{
+	if (input.pData == nullptr || input.size == 0U)
+		return false;
+	else if (output.pData == nullptr || output.size == 0U)
+		return false;
+	else if ((input.pData > output.pData)
+		&& ((output.pData + output.size) >= input.pData))
+		// Buffers are overlapping
+		return false;
+	else if ((output.pData > input.pData)
+		&& ((input.pData + input.size) >= output.pData))
+		// Buffers are overlapping
+		return false;
+	return true;
+}
 
-	inline Crypto::SHA3_Length GetHashLength(const Crypto::KeySize keysize)
+inline Crypto::SHA3_Length GetHashLength(const Crypto::KeySize keysize)
+{
+	Crypto::SHA3_Length ret = Crypto::SHA3_Length::SHA3_512;
+	switch (keysize)
 	{
-		Crypto::SHA3_Length ret = Crypto::SHA3_Length::SHA3_512;
-		switch (keysize)
-		{
-		case Crypto::KeySize::KS_256:
-			ret = Crypto::SHA3_Length::SHA3_224;
-			break;
-		case Crypto::KeySize::KS_512:
-			ret = Crypto::SHA3_Length::SHA3_384;
-			break;
-		case Crypto::KeySize::KS_1024:
-		case Crypto::KeySize::KS_2048:
-		case Crypto::KeySize::KS_3072:
-			ret = Crypto::SHA3_Length::SHA3_512;
-			break;
-		default:
-			break;
-		}
-		return ret;
+	case Crypto::KeySize::KS_256:
+		ret = Crypto::SHA3_Length::SHA3_224;
+		break;
+	case Crypto::KeySize::KS_512:
+		ret = Crypto::SHA3_Length::SHA3_384;
+		break;
+	case Crypto::KeySize::KS_1024:
+	case Crypto::KeySize::KS_2048:
+	case Crypto::KeySize::KS_3072:
+		ret = Crypto::SHA3_Length::SHA3_512;
+		break;
+	default:
+		break;
 	}
+	return ret;
+}
 }
 
 Crypto::AsymmetricKeys::AsymmetricKeys()
@@ -588,7 +588,7 @@ Crypto::CryptoRet Crypto::CreateSignature(PrivateKey key,
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
 	// Create a hash from the data
-	char hashBuffer[64] {}; // 64B is enough for all SHA3 lengths
+	char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
 	SHA3::SHA3Hasher hasher;
 	hasher.Process(hashLength, dataStream, hashBuffer);
 

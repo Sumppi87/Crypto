@@ -6,113 +6,115 @@
 
 namespace
 {
-	// !\brief Encrypted data contains the actual byte count in the block
-	// !\details Byte count is written before actual data.
-	const uint8_t BLOCK_SIZE_BYTES = 2U;
+// !\brief Encrypted data contains the actual byte count in the block
+// !\details Byte count is written before actual data.
+const uint8_t BLOCK_SIZE_BYTES = 2U;
 
-	// !\brief
-	// !\details Byte count is wruitten before actual data.
-	const uint8_t GUARD_BYTES = 1;
+// !\brief
+// !\details Byte count is wruitten before actual data.
+const uint8_t GUARD_BYTES = 1;
 
-	bool ParseFromRawData(std::istringstream& input, BigInt& num)
+bool ParseFromRawData(std::istringstream& input, BigInt& num)
+{
+	std::string n;
+	if (std::getline(input, n))
 	{
-		std::string n;
-		if (std::getline(input, n))
-		{
-			num = BigInt::FromString(n.data());
-			return true;
-		}
-		return false;
+		num = BigInt::FromString(n.data());
+		return true;
 	}
+	return false;
+}
 
-	inline bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
+inline bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
+{
+	bool retVal = true;
+	const auto size = n.GetByteWidth();
+	auto IsCorrectSize = [size](const auto s)
 	{
-		auto num = n.GetByteWidth() * 8U;
-		bool retVal = true;
-		switch (num)
-		{
-		case 256U:
-			keySize = Crypto::KeySize::KS_256;
-			break;
-		case 512U:
-			keySize = Crypto::KeySize::KS_512;
-			break;
-		case 1024U:
-			keySize = Crypto::KeySize::KS_1024;
-			break;
-		case 2048U:
-			keySize = Crypto::KeySize::KS_2048;
-			break;
-		case 3072U:
-			keySize = Crypto::KeySize::KS_3072;
-			break;
-		default:
-			retVal = false;
-			break;
-		}
-		return retVal;
-	}
+		return s == size || s == (size + 1);
+	};
 
-	inline uint16_t KeyBytes(const Crypto::KeySize keySize)
+	if (IsCorrectSize(32U))
 	{
-		uint16_t block = 0U;
-		switch (keySize)
-		{
-		case Crypto::KeySize::KS_256:
-			block = 32U;
-			break;
-		case Crypto::KeySize::KS_512:
-			block = 64U;
-			break;
-		case Crypto::KeySize::KS_1024:
-			block = 128U;
-			break;
-		case Crypto::KeySize::KS_2048:
-			block = 256U;
-			break;
-		case Crypto::KeySize::KS_3072:
-			block = 384U;
-			break;
-		default:
-			break;
-		}
-		return block;
+		keySize = Crypto::KeySize::KS_256;
 	}
+	else if (IsCorrectSize(64U))
+	{
+		keySize = Crypto::KeySize::KS_512;
+	}
+	else if (IsCorrectSize(128U))
+	{
+		keySize = Crypto::KeySize::KS_1024;
+	}
+	else if (IsCorrectSize(256U))
+	{
+		keySize = Crypto::KeySize::KS_2048;
+	}
+	else if (IsCorrectSize(384U))
+	{
+		keySize = Crypto::KeySize::KS_3072;
+	}
+	else
+	{
+		retVal = false;
+	}
+	return retVal;
+}
 
-	inline bool operator>(const BigInt& num, const Crypto::KeySize keysize)
+inline uint16_t KeyBytes(const Crypto::KeySize keySize)
+{
+	uint16_t block = 0U;
+	switch (keySize)
 	{
-		const auto keyBytes = KeyBytes(keysize);
-		return num.GetBitWidth() > (keyBytes * 8U);
+	case Crypto::KeySize::KS_256:
+		block = 32U;
+		break;
+	case Crypto::KeySize::KS_512:
+		block = 64U;
+		break;
+	case Crypto::KeySize::KS_1024:
+		block = 128U;
+		break;
+	case Crypto::KeySize::KS_2048:
+		block = 256U;
+		break;
+	case Crypto::KeySize::KS_3072:
+		block = 384U;
+		break;
+	default:
+		break;
 	}
+	return block;
+}
 
-	inline bool operator!=(const BigInt& num, const Crypto::KeySize keysize)
-	{
-		const auto keyBytes = KeyBytes(keysize);
-		return num.GetBitWidth() != (keyBytes * 8U);
-	}
+inline bool operator>(const BigInt& num, const Crypto::KeySize keysize)
+{
+	const auto keyBytes = KeyBytes(keysize);
+	return num.GetBitWidth() > (keyBytes * 8U);
+}
 
-	void WriteNewline(std::ostringstream& buffer)
-	{
-		buffer << std::endl;
-	}
+void WriteNewline(std::ostringstream& buffer)
+{
+	buffer << std::endl;
+}
 
-	void WriteNumToBuffer(std::ostringstream& buffer, const BigInt& num, const bool addNewline)
+void WriteNumToBuffer(std::ostringstream& buffer, const BigInt& num, const bool addNewline)
+{
+	const auto d = num.ToHex();
+	buffer << d;
+	if (addNewline)
 	{
-		const auto d = num.ToHex();
-		buffer << d;
-		if (addNewline)
-		{
-			WriteNewline(buffer);
-		}
+		WriteNewline(buffer);
 	}
+}
 
-	void WriteToBuffer(const BigInt& exponent,
-		const BigInt& modulo,
-		std::ostringstream& buffer)
-	{
-		WriteNumToBuffer(buffer, exponent, true);
-		WriteNumToBuffer(buffer, modulo, false);
-	}
+void WriteToBuffer(const BigInt& exponent,
+	const BigInt& modulo,
+	std::ostringstream& buffer)
+{
+	WriteNumToBuffer(buffer, exponent, true);
+	WriteNumToBuffer(buffer, modulo, false);
+}
 }
 
 CryptoUtils::RandomGenerator::RandomGenerator()
@@ -324,12 +326,10 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize)
 	const BigInt two(2U);
 	while (!randPrime.IsPrimeNumber())
 	{
-		//RAND.RandomData(randPrime.m_vals, randPrime.CurrentSize());
-		//BigInt::SumWithoutSign(randPrime, two);
 		randPrime = randPrime + two;
 	}
 
-	if (randPrime > keySize)
+	if (randPrime.GetByteWidth() > keyBytes)
 	{
 		_ASSERT(0);
 		std::cerr << "Generated prime number is larger than expected, retry" << std::endl;
@@ -414,8 +414,6 @@ Crypto::CryptoRet CryptoUtils::ValidateKey(const Crypto::PrivateKey key)
 	else if (key->d.IsZero() || !key->d.IsPositive())
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 	else if (key->n.IsZero() || !key->n.IsPositive())
-		return Crypto::CryptoRet::INVALID_PARAMETER;
-	else if (key->n.GetByteWidth() != key->d.GetByteWidth())
 		return Crypto::CryptoRet::INVALID_PARAMETER;
 
 	return Crypto::CryptoRet::OK;
