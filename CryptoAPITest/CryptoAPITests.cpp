@@ -33,6 +33,24 @@ std::map<Crypto::KeySize, Keys> KEYS{
 	"0x346CE676045B08BF2DC1B50586591D03D78C440EBDF2060014253239E5BA7F913D05892EDA964120B4A20126827130A91EFAD7BDC92EDEC4073C47C02DB55793D94E09186A08B44CF6DC3D20FED5945367E4E98E31378B802B8B3B0FD9B48730781D6BD4DEF6E18AD2F8626D56C7E436DBEF9095108576BB07D82359466B2E578383221407EE3DFADC1F061EE019AB50930EA1241AFCBD8DAE00B5B1F56AE92D5C4BE92B2499FD4ACEE14436DDA30C88B428C64DAEFAEA525EBC261206C672DA78E865AABC54B764CABC315425181F803F81D35D0E5C646B120D73466B66516CBE0B3B4379C9993F57BFEFFC11C682320D21A829D11FF29A181A706673833821", // Private exponent
 	"0x10001"}}, // Public exponent
 };
+
+template <Crypto::KeySize k,
+	uint16_t bufferSizePrivate = BUFFER_SIZE_PRIVATE(k) + 2,
+	uint16_t bufferSizePublic = BUFFER_SIZE_PUBLIC(k) + 2>
+	void GetStaticKeys(Keys* keys, Crypto::AsymmetricKeys* cryptoKeys, bool& ret)
+{
+	char bufferPrivate[bufferSizePrivate]{};
+	char bufferPublic[bufferSizePublic]{};
+	memcpy(bufferPrivate, keys->n.c_str(), keys->n.size());
+	memcpy(bufferPrivate + keys->n.size(), keys->d.c_str(), keys->d.size());
+
+	memcpy(bufferPublic, keys->n.c_str(), keys->n.size());
+	memcpy(bufferPublic + keys->n.size(), keys->e.c_str(), keys->e.size());
+
+	EXPECT_EQ(Crypto::ImportAsymmetricKeys(cryptoKeys, Crypto::DataIn(bufferPrivate, bufferSizePrivate),
+		Crypto::DataIn(bufferPublic, bufferSizePublic)), Crypto::CryptoRet::OK);
+	ret = true;
+}
 }
 
 namespace
@@ -179,23 +197,13 @@ void TestCrypto(bool& ret)
 	ret = true;
 }
 
-template <Crypto::KeySize k,
-	uint16_t bufferSizePrivate = BUFFER_SIZE_PRIVATE(k) + 2,
-	uint16_t bufferSizePublic = BUFFER_SIZE_PUBLIC(k) + 2>
-	void TestCrypto(Keys* keys, bool& ret)
+template <Crypto::KeySize k>
+void TestCrypto(Keys* keys, bool& ret)
 {
-	char bufferPrivate[bufferSizePrivate]{};
-	char bufferPublic[bufferSizePublic]{};
-	memcpy(bufferPrivate, keys->n.c_str(), keys->n.size());
-	memcpy(bufferPrivate + keys->n.size(), keys->d.c_str(), keys->d.size());
-
-	memcpy(bufferPublic, keys->n.c_str(), keys->n.size());
-	memcpy(bufferPublic + keys->n.size(), keys->e.c_str(), keys->e.size());
-
 	Crypto::AsymmetricKeys cryptoKeys;
-
-	auto keyRet = Crypto::ImportAsymmetricKeys(&cryptoKeys, Crypto::DataIn(bufferPrivate, bufferSizePrivate),
-		Crypto::DataIn(bufferPublic, bufferSizePublic));
+	GetStaticKeys<k>(keys, &cryptoKeys, ret);
+	if (!ret)
+		return;
 
 	const char* data = "Lorem ipsum dolor sit amet, consectetur adipiscing elit,"
 		" sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. "
@@ -209,6 +217,8 @@ template <Crypto::KeySize k,
 		"Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.";
 
 	TestCrypto<k, 1024>(&cryptoKeys, Crypto::DataIn(data, strlen(data)), ret);
+
+	ASSERT_EQ(Crypto::DeleteAsymmetricKeys(&cryptoKeys), Crypto::CryptoRet::OK) << "Deleting asymmetric keys failed";
 }
 
 template <Crypto::KeySize k>
@@ -227,10 +237,18 @@ bool TestCrypto(const uint8_t iter, const uint8_t maxIters)
 template <typename T>
 class CryptoAPITest : public ::testing::Test {};
 
-template<Crypto::KeySize k, uint8_t iters>
-struct TestRun
+template <typename T>
+class CryptoAPIBasicTest : public ::testing::Test {};
+
+template<Crypto::KeySize k>
+struct BasicTestRun
 {
 	static constexpr Crypto::KeySize keySize = k;
+};
+
+template<Crypto::KeySize k, uint8_t iters>
+struct TestRun : public BasicTestRun<k>
+{
 	static constexpr uint8_t iterations = iters;
 };
 
@@ -239,12 +257,97 @@ using TestRuns = ::testing::Types<TestRun<Crypto::KeySize::KS_256, 25>,
 	TestRun<Crypto::KeySize::KS_512, 15>,
 	TestRun<Crypto::KeySize::KS_1024, 5>,
 	TestRun<Crypto::KeySize::KS_2048, 3>>;
+using BasicTestRuns = ::testing::Types<BasicTestRun<Crypto::KeySize::KS_256>,
+	BasicTestRun<Crypto::KeySize::KS_512>,
+	BasicTestRun<Crypto::KeySize::KS_1024>,
+	BasicTestRun<Crypto::KeySize::KS_2048>>;
 #else
 using TestRuns = ::testing::Types<TestRun<Crypto::KeySize::KS_256, 1>>;
+using BasicTestRuns = ::testing::Types < BasicTestRun<Crypto::KeySize::KS_256>>;
 #endif
 TYPED_TEST_CASE(CryptoAPITest, TestRuns);
+TYPED_TEST_CASE(CryptoAPIBasicTest, BasicTestRuns);
 
-TYPED_TEST(CryptoAPITest, BasicTests)
+TYPED_TEST(CryptoAPIBasicTest, NegativeTestsCreateKeys)
+{
+	gtest_TypeParam_ type;
+	// Try with an invalid key-pointer
+	EXPECT_EQ(Crypto::CreateAsymmetricKeys(type.keySize, nullptr), Crypto::CryptoRet::INVALID_PARAMETER);
+
+	// Try with an invalid keysize
+	Crypto::AsymmetricKeys keys;
+	EXPECT_EQ(Crypto::CreateAsymmetricKeys(static_cast<Crypto::KeySize>(0), &keys), Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(keys.privKey, nullptr);
+	EXPECT_EQ(keys.pubKey, nullptr);
+}
+
+TYPED_TEST(CryptoAPIBasicTest, NegativeTestsDeleteKeys)
+{
+	gtest_TypeParam_ type;
+	// Try with an invalid key-pointer
+	EXPECT_EQ(Crypto::DeleteAsymmetricKeys(nullptr), Crypto::CryptoRet::INVALID_PARAMETER);
+
+	// Invalid public/private key
+	EXPECT_EQ(Crypto::DeleteKey((Crypto::PublicKey*)nullptr), Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(Crypto::DeleteKey((Crypto::PrivateKey*)nullptr), Crypto::CryptoRet::INVALID_PARAMETER);
+}
+
+TYPED_TEST(CryptoAPIBasicTest, NegativeTestsExportKeys)
+{
+	gtest_TypeParam_ type;
+	constexpr auto privSize = BUFFER_SIZE_PRIVATE(type.keySize);
+	constexpr auto pubSize = BUFFER_SIZE_PUBLIC(type.keySize);
+	char bufPriv[privSize]{};
+	char bufPub[pubSize]{};
+	Crypto::DataOut priv(bufPriv, privSize);
+	Crypto::DataOut pub(bufPub, pubSize);
+	uint16_t writtenPriv = 0, writtenPub = 0;
+	Crypto::AsymmetricKeys keys;
+	bool ret = false;
+	GetStaticKeys<type.keySize>(&KEYS.at(type.keySize), &keys, ret);
+	ASSERT_TRUE(ret);
+
+	// Try with an invalid key-pointer
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(nullptr, priv, &writtenPriv, pub, &writtenPub),
+		Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, priv, nullptr, pub, &writtenPub),
+		Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, priv, &writtenPriv, pub, nullptr),
+		Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, Crypto::DataOut(bufPriv, privSize - 1), &writtenPriv, pub, &writtenPub),
+		Crypto::CryptoRet::INSUFFICIENT_BUFFER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, Crypto::DataOut(nullptr, privSize), &writtenPriv, pub, &writtenPub),
+		Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, priv, &writtenPriv, Crypto::DataOut(bufPub, pubSize - 1), &writtenPub),
+		Crypto::CryptoRet::INSUFFICIENT_BUFFER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	EXPECT_EQ(Crypto::ExportAsymmetricKeys(&keys, priv, &writtenPriv, Crypto::DataOut(nullptr, pubSize), &writtenPub),
+		Crypto::CryptoRet::INVALID_PARAMETER);
+	EXPECT_EQ(writtenPriv, 0);
+	EXPECT_EQ(writtenPub, 0);
+
+	// Cleanup
+	ASSERT_EQ(Crypto::DeleteAsymmetricKeys(&keys), Crypto::CryptoRet::OK);
+}
+
+TYPED_TEST(CryptoAPIBasicTest, APIBasicTests)
 {
 	gtest_TypeParam_ type;
 	bool ret = false;

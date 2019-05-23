@@ -50,6 +50,24 @@ inline Crypto::SHA3_Length GetHashLength(const Crypto::KeySize keysize)
 	}
 	return ret;
 }
+
+inline bool IsValidKeySize(const Crypto::KeySize k)
+{
+	bool isValid = false;
+	switch (k)
+	{
+	case Crypto::KeySize::KS_256:
+	case Crypto::KeySize::KS_512:
+	case Crypto::KeySize::KS_1024:
+	case Crypto::KeySize::KS_2048:
+	case Crypto::KeySize::KS_3072:
+		isValid = true;
+		break;
+	default:
+		break;
+	}
+	return isValid;
+}
 }
 
 Crypto::AsymmetricKeys::AsymmetricKeys()
@@ -68,6 +86,8 @@ Crypto::DataOut::DataOut(char* data, const uint64_t s)
 Crypto::CryptoRet Crypto::CreateAsymmetricKeys(const KeySize s, AsymmetricKeys* pKeys)
 {
 	if (pKeys == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(s))
 		return CryptoRet::INVALID_PARAMETER;
 
 	CryptoRet ret = CryptoRet::OK;
@@ -178,6 +198,8 @@ Crypto::CryptoRet Crypto::ExportAsymmetricKeys(AsymmetricKeys* keys,
 		return CryptoRet::INVALID_PARAMETER;
 	else if (!ValidateBuffers(priv, pub))
 		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(keys->keySize))
+		return CryptoRet::INVALID_PARAMETER;
 
 	CryptoRet ret = CryptoUtils::WriteKeyToBuffer(keys->pubKey, pub, pPubBytesWritten);
 	if (ret == CryptoRet::OK)
@@ -187,6 +209,7 @@ Crypto::CryptoRet Crypto::ExportAsymmetricKeys(AsymmetricKeys* keys,
 		{
 			// Clear already written public key
 			memset(pub.pData, 0U, pub.size);
+			*pPubBytesWritten = 0;
 		}
 	}
 	return ret;
@@ -338,6 +361,8 @@ Crypto::CryptoRet Crypto::Encrypt(const PublicKey key, const DataIn input, const
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pEncryptedBytes == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(key->keySize))
+		return CryptoRet::INVALID_PARAMETER;
 
 	// BlockSize : ((KeySize / 8) - 2)
 	// BlockCount : ceil(input.size / BlockSize)
@@ -440,6 +465,8 @@ Crypto::CryptoRet Crypto::Decrypt(const PrivateKey key, const DataIn input, cons
 	else if (!ValidateBuffers(input, output))
 		return CryptoRet::INVALID_PARAMETER;
 	else if (pDecryptedBytes == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(key->keySize))
 		return CryptoRet::INVALID_PARAMETER;
 
 	// BlockSize : ((KeySize / 8) - 2)
@@ -577,6 +604,8 @@ Crypto::CryptoRet Crypto::CreateSignature(PrivateKey key,
 		return CryptoRet::INVALID_PARAMETER;
 	else if (signature.pData == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(key->keySize))
+		return CryptoRet::INVALID_PARAMETER;
 
 	const SHA3_Length hashLength = GetHashLength(key->keySize);
 	const uint8_t hashBytes = static_cast<uint8_t>(hashLength);
@@ -604,6 +633,8 @@ Crypto::CryptoRet Crypto::CheckSignature(PublicKey key,
 	if (key == nullptr)
 		return CryptoRet::INVALID_PARAMETER;
 	else if (signature.pData == nullptr)
+		return CryptoRet::INVALID_PARAMETER;
+	else if (!IsValidKeySize(key->keySize))
 		return CryptoRet::INVALID_PARAMETER;
 
 	const SHA3_Length hashLength = GetHashLength(key->keySize);
