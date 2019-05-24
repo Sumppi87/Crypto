@@ -339,54 +339,6 @@ BigInt CryptoUtils::GenerateRandomPrime(const Crypto::KeySize keySize)
 	return randPrime;
 }
 
-BigInt CryptoUtils::GenerateRandomPrime(const size_t bits)
-{
-	const size_t blocks = bits / (8U * sizeof(BigInt::Base));
-	const size_t remBits = bits % (8U * sizeof(BigInt::Base));
-
-	BigInt randPrime;
-	randPrime.Resize(blocks > 0U ? blocks : 1U);
-
-	// Generate random data
-	RAND.RandomData((uint64_t*)randPrime.m_vals, randPrime.CurrentSize());
-	if (!randPrime.IsOdd())
-		randPrime = randPrime + 1U;
-
-	// Make sure the highest bit is set
-	if (remBits > 0U)
-	{
-		// Bit indexing starts at zero
-		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << (remBits - 1U);
-
-		//And clear remaining bits
-		BigInt::Base mask = ~0ULL;
-		for (auto i = remBits; i < sizeof(BigInt::Base) * 8U; ++i)
-		{
-			mask &= ~(1ULL << i);
-		}
-		randPrime.m_vals[randPrime.CurrentSize() - 1U] &= mask;
-	}
-	else
-	{
-		randPrime.m_vals[randPrime.CurrentSize() - 1U] |= 1ULL << 63U;
-	}
-
-	const BigInt two(2U);
-	while (!randPrime.IsPrimeNumber())
-	{
-		randPrime = randPrime + two;
-	}
-
-	if (randPrime.GetBitWidth() > bits)
-	{
-		_ASSERT(0);
-		std::cerr << "Generated prime number is larger than expected, retry" << std::endl;
-		return GenerateRandomPrime(bits);
-	}
-
-	return randPrime;
-}
-
 Crypto::CryptoRet CryptoUtils::ValidateKeys(const Crypto::AsymmetricKeys* keys)
 {
 	if (keys == nullptr)

@@ -67,8 +67,6 @@ public:
 
 	static BigInt GenerateRandomPrime(const Crypto::KeySize keySize);
 
-	static BigInt GenerateRandomPrime(const size_t bits);
-
 	static Crypto::CryptoRet ValidateKeys(const Crypto::AsymmetricKeys* keys);
 	static Crypto::CryptoRet ValidateKey(const Crypto::PrivateKey key);
 	static Crypto::CryptoRet ValidateKey(const Crypto::PublicKey key);
