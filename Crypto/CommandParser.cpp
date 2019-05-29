@@ -59,8 +59,8 @@ namespace
 			"<file to sign, can be absolute or relative filepath> <created signature file, can be absolute or relative filepath>"}},
 
 	{Command::VALIDATE_SIGNATURE, {Command::VALIDATE_SIGNATURE, true, { {2, {ParamType::STRING, ParamType::STRING}} }, {{Command::LOAD_PUBLIC_KEY, true}},
-			"<signature file> <file to validate>",
-			"<signature file, can be absolute or relative filepath> <file to be validated againts the signature, can be absolute or relative filepath>"}},
+			"<file to validate> <signature file>",
+			"<file to be validated againts the signature, can be absolute or relative filepath> <signature file, can be absolute or relative filepath> "}},
 
 #if defined(USE_THREADS)
 
