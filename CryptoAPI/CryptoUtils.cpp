@@ -444,8 +444,12 @@ Crypto::CryptoRet CryptoUtils::CreateSignature(Crypto::PrivateKey key,
 	BigInt data = BigInt::FromRawData(hashedData.pData, hashedData.size);
 	const auto blockSize = KeyBytes(key->keySize);
 
+	if (blockSize <= GUARD_BYTES)
+	{
+		return Crypto::CryptoRet::INVALID_PARAMETER;
+	}
 	// Add some random data after the hash
-	if (hashedData.size < (blockSize - GUARD_BYTES))
+	else if (hashedData.size < uint16_t(blockSize - GUARD_BYTES))
 	{
 		data.Resize(blockSize / sizeof(BigInt::Base));
 		RAND.RandomData((char*)data.m_vals + hashedData.size, (blockSize - GUARD_BYTES) - hashedData.size);

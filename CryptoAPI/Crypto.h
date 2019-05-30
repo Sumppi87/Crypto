@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <iosfwd>
 
-#if not defined(_M_X64)
+#if !defined(_M_X64)
 #error("only 64bit is supported")
 #endif
 
