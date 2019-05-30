@@ -131,6 +131,9 @@ namespace
 		case 3072:
 			keySize = Crypto::KeySize::KS_3072;
 			break;
+		case 4096:
+			keySize = Crypto::KeySize::KS_4096;
+			break;
 		default:
 			retVal = false;
 			break;

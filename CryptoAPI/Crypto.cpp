@@ -43,6 +43,7 @@ inline Crypto::SHA3_Length GetHashLength(const Crypto::KeySize keysize)
 	case Crypto::KeySize::KS_1024:
 	case Crypto::KeySize::KS_2048:
 	case Crypto::KeySize::KS_3072:
+	case Crypto::KeySize::KS_4096:
 		ret = Crypto::SHA3_Length::SHA3_512;
 		break;
 	default:
@@ -61,6 +62,7 @@ inline bool IsValidKeySize(const Crypto::KeySize k)
 	case Crypto::KeySize::KS_1024:
 	case Crypto::KeySize::KS_2048:
 	case Crypto::KeySize::KS_3072:
+	case Crypto::KeySize::KS_4096:
 		isValid = true;
 		break;
 	default:

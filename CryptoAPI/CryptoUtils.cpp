@@ -54,6 +54,10 @@ inline bool GetKeySize(const BigInt& n, Crypto::KeySize& keySize)
 	{
 		keySize = Crypto::KeySize::KS_3072;
 	}
+	else if (IsCorrectSize(512U))
+	{
+		keySize = Crypto::KeySize::KS_4096;
+	}
 	else
 	{
 		retVal = false;
@@ -80,6 +84,9 @@ inline uint16_t KeyBytes(const Crypto::KeySize keySize)
 		break;
 	case Crypto::KeySize::KS_3072:
 		block = 384U;
+		break;
+	case Crypto::KeySize::KS_4096:
+		block = 512U;
 		break;
 	default:
 		break;

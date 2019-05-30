@@ -2,7 +2,7 @@
 #include <string>
 #include <atomic>
 
-#define MAX_SIZE 64
+#define MAX_SIZE 128
 
 class CryptoUtils;
 
