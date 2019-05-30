@@ -239,6 +239,8 @@ bool DecryptData(const std::string& keyFile, const std::string& fileToDecrypt, c
 		}
 		else
 		{
+			keys.keySize = keys.privKey->keySize;
+
 			std::cout << "Done" << std::endl;
 			std::cout << "Decrypting the file... ";
 			const auto start = std::chrono::high_resolution_clock::now();
@@ -286,6 +288,8 @@ bool EncryptData(const std::string& keyFile, const std::string& fileToEncrypt, c
 	}
 	else
 	{
+		keys.keySize = keys.pubKey->keySize;
+
 		std::cout << "Done" << std::endl;
 		std::cout << "Opening unencrypted & target file... ";
 		if (!OpenForRead(fileToEncrypt, in))
