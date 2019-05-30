@@ -618,13 +618,38 @@ Crypto::CryptoRet Crypto::CreateSignature(PrivateKey key,
 	if (blockSize > signature.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
-	// Create a hash from the data
-	char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
-	SHA3::SHA3Hasher hasher;
-	hasher.Process(hashLength, dataStream, hashBuffer);
+	CryptoRet ret = CryptoRet::OK;
+	try
+	{
+		// Create a hash from the data
+		char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
+		SHA3::SHA3Hasher hasher;
+		hasher.Process(hashLength, dataStream, hashBuffer);
 
-	// Encrypt the data with private key
-	return CryptoUtils::CreateSignature(key, DataIn(hashBuffer, hashBytes), signature);
+		// Encrypt the data with private key
+		ret = CryptoUtils::CreateSignature(key, DataIn(hashBuffer, hashBytes), signature);
+	}
+	catch (const std::invalid_argument& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::invalid_argument occured: " << e.what() << std::endl;
+	}
+	catch (const std::logic_error& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::logic_error occured: " << e.what() << std::endl;
+	}
+	catch (const std::bad_alloc& e)
+	{
+		ret = CryptoRet::INSUFFICIENT_RESOURCES;
+		std::cerr << "std::bad_alloc occured: " << e.what() << std::endl;
+	}
+	catch (...)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "Unknown exception occured" << std::endl;
+	}
+	return ret;
 }
 
 Crypto::CryptoRet Crypto::CheckSignature(PublicKey key,
@@ -648,12 +673,36 @@ Crypto::CryptoRet Crypto::CheckSignature(PublicKey key,
 	if (blockSize > signature.size)
 		return CryptoRet::INSUFFICIENT_BUFFER;
 
-	// Create a hash from the data
-	char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
-	SHA3::SHA3Hasher hasher;
-	hasher.Process(hashLength, file, hashBuffer);
+	CryptoRet ret = CryptoRet::OK;
+	try
+	{
+		// Create a hash from the data
+		char hashBuffer[64]{}; // 64B is enough for all SHA3 lengths
+		SHA3::SHA3Hasher hasher;
+		hasher.Process(hashLength, file, hashBuffer);
 
-	// Encrypt the data with private key
-	validationResult = CryptoUtils::CheckSignature(key, DataIn(hashBuffer, hashBytes), signature);
-	return CryptoRet::OK;
+		// Encrypt the data with private key
+		validationResult = CryptoUtils::CheckSignature(key, DataIn(hashBuffer, hashBytes), signature);
+	}
+	catch (const std::invalid_argument& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::invalid_argument occured: " << e.what() << std::endl;
+	}
+	catch (const std::logic_error& e)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "std::logic_error occured: " << e.what() << std::endl;
+	}
+	catch (const std::bad_alloc& e)
+	{
+		ret = CryptoRet::INSUFFICIENT_RESOURCES;
+		std::cerr << "std::bad_alloc occured: " << e.what() << std::endl;
+	}
+	catch (...)
+	{
+		ret = CryptoRet::INTERNAL_ERROR;
+		std::cerr << "Unknown exception occured" << std::endl;
+	}
+	return ret;
 }
